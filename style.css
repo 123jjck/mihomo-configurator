@@ -6,6 +6,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica N
 .header{position:relative;text-align:center;margin-bottom:28px}
 .header h1{font-size:22px;font-weight:700;color:#1e1e2d;letter-spacing:-.3px}
 .header p{color:#7b8094;font-size:13px;margin-top:2px}
+.github-link{position:absolute;top:2px;left:0;width:34px;height:34px;border:1.5px solid #dfe2ea;border-radius:10px;background:#fff;color:#4a4d5c;display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s,transform .15s;text-decoration:none}
+.github-link:hover{border-color:#267cff;color:#267cff;transform:translateY(-1px)}
 .lang-switch{position:absolute;top:0;right:0;display:flex;align-items:center;gap:8px}
 .lang-switch .field-label{margin:0;font-size:11px;letter-spacing:.35px}
 .lang-select{width:110px;padding:6px 10px;font-size:13px}
@@ -151,6 +153,7 @@ textarea.field-input{resize:vertical;font-family:'SF Mono',Monaco,Consolas,'Libe
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
 
 @media(max-width:600px){
+  .github-link{position:static;margin-bottom:10px}
   .lang-switch{position:static;justify-content:flex-end;margin-bottom:10px}
   .steps{gap:4px;justify-content:flex-start;padding:4px 8px}
   .step-btn{padding:7px 12px;font-size:12px}
