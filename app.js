@@ -597,7 +597,12 @@ function parseVless(url) {
   const sec = p.get('security') || '';
   if (sec === 'tls' || sec === 'reality') proxy.tls = true;
   if (p.get('sni')) proxy.servername = p.get('sni');
-  if (p.get('fp')) proxy['client-fingerprint'] = p.get('fp');
+  if (p.get('fp')) {
+    proxy['client-fingerprint'] = p.get('fp');
+  } else if (sec === 'tls' || sec === 'reality') {
+    // Auto-add default client-fingerprint for TLS/reality connections
+    proxy['client-fingerprint'] = 'chrome';
+  }
   if (p.get('flow')) proxy.flow = p.get('flow');
 
   if (sec === 'reality') {
