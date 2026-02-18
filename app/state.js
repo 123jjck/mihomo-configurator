@@ -104,6 +104,7 @@ const I18N = {
     downloadSuccess: 'Файл config.yaml скачан',
     subscriptionType: 'подписка',
     presetDirectRu: 'RU трафик напрямую',
+    presetRuBlocked: 'Заблокированные сайты',
     presetAllCdn: 'Все CDN',
     devicePcLabel: 'PC / Android / iOS',
     devicePcHintHtml: 'Клиент: <a href="https://github.com/pluralplay/FlClashX/releases" target="_blank" style="color:#267cff">FlClashX</a> (Windows / macOS / Linux / Android) · iOS: <a href="https://apps.apple.com/us/app/clash-mi/id6744321968" target="_blank" style="color:#267cff">Clash Mi</a>',
@@ -196,6 +197,7 @@ const I18N = {
     downloadSuccess: 'config.yaml downloaded',
     subscriptionType: 'subscription',
     presetDirectRu: 'RU traffic direct',
+    presetRuBlocked: 'Blocked sites',
     presetAllCdn: 'All CDNs',
     devicePcLabel: 'PC / Android / iOS',
     devicePcHintHtml: 'Client: <a href="https://github.com/pluralplay/FlClashX/releases" target="_blank" style="color:#267cff">FlClashX</a> (Windows / macOS / Linux / Android) · iOS: <a href="https://apps.apple.com/us/app/clash-mi/id6744321968" target="_blank" style="color:#267cff">Clash Mi</a>',
@@ -353,17 +355,19 @@ const DNS_NS_PRESETS = {
 // ============================================================
 const SERVICE_PRESETS = {
   telegram:  { label: 'Telegram',  rules: [{type:'RULE-SET',payload:'telegram',target:'Proxy'}] },
-  youtube:   { label: 'YouTube',   rules: [{type:'GEOSITE',payload:'youtube',target:'Proxy'}] },
-  twitter:   { label: 'Twitter',   rules: [{type:'GEOSITE',payload:'twitter',target:'Proxy'}] },
-  facebook:  { label: 'Facebook',  rules: [{type:'GEOSITE',payload:'facebook',target:'Proxy'}] },
-  whatsapp:  { label: 'WhatsApp',  rules: [{type:'GEOSITE',payload:'whatsapp',target:'Proxy'}] },
-  instagram: { label: 'Instagram', rules: [{type:'GEOSITE',payload:'instagram',target:'Proxy'}] },
-  chatgpt:   { label: 'ChatGPT',   rules: [{type:'GEOSITE',payload:'openai',target:'Proxy'}] }
+  youtube:   { label: 'YouTube',   rules: [{type:'RULE-SET',payload:'geosite-youtube',target:'Proxy'}] },
+  twitter:   { label: 'Twitter',   rules: [{type:'RULE-SET',payload:'geosite-twitter',target:'Proxy'}] },
+  facebook:  { label: 'Facebook',  rules: [{type:'RULE-SET',payload:'geosite-facebook',target:'Proxy'}] },
+  whatsapp:  { label: 'WhatsApp',  rules: [{type:'RULE-SET',payload:'geosite-whatsapp',target:'Proxy'}] },
+  instagram: { label: 'Instagram', rules: [{type:'RULE-SET',payload:'geosite-instagram',target:'Proxy'}] },
+  chatgpt:   { label: 'ChatGPT',   rules: [{type:'RULE-SET',payload:'geosite-openai',target:'Proxy'}] },
+  gemini:    { label: 'Gemini',    rules: [{type:'RULE-SET',payload:'geosite-google-gemini',target:'Proxy'}] },
+  claude:    { label: 'Claude',    rules: [{type:'RULE-SET',payload:'geosite-anthropic',target:'Proxy'}] }
 };
 
 const OTHER_PRESETS = {
   directRU:  { labelKey: 'presetDirectRu', rules: [{type:'GEOIP',payload:'RU',target:'DIRECT'}] },
-  ruBlocked: { label: 'ru-blocked', rules: [{type:'RULE-SET',payload:'ru-blocked',target:'Proxy'}] }
+  ruBlocked: { labelKey: 'presetRuBlocked', rules: [{type:'RULE-SET',payload:'ru-blocked',target:'Proxy'}] }
 };
 
 const CDN_PROVIDERS = [
