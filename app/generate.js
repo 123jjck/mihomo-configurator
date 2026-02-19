@@ -129,6 +129,7 @@ function proxyToYaml(p) {
 
     case 'wireguard':
       y += `    ip: ${p.ip}\n`;
+      if (p.ipv6) y += `    ipv6: ${p.ipv6}\n`;
       y += `    private-key: ${p['private-key']}\n`;
       y += `    public-key: ${p['public-key']}\n`;
       y += `    udp: true\n`;
