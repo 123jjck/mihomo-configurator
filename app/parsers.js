@@ -211,7 +211,15 @@ function parseWireGuardConfig(text) {
   if (!ep) return null;
   const server = ep[1], port = +ep[2];
   const address = getKey(iface, 'Address');
-  const ip = address ? address.split('/')[0] : '10.0.0.2';
+  let ip = '10.0.0.2';
+  let ipv6 = null;
+  if (address) {
+    const addrs = address.split(',').map(a => a.trim().split('/')[0].trim());
+    const v4 = addrs.find(a => /^\d{1,3}(\.\d{1,3}){3}$/.test(a));
+    const v6 = addrs.find(a => a.includes(':'));
+    if (v4) ip = v4;
+    if (v6) ipv6 = v6;
+  }
   const isAmnezia = hasAnyAwgKey(iface);
 
   const proxy = {
@@ -221,6 +229,7 @@ function parseWireGuardConfig(text) {
     'public-key': publicKey,
     udp: true
   };
+  if (ipv6) proxy.ipv6 = ipv6;
   const mtu = toIntMaybe(getKey(iface, 'MTU'));
   if (mtu !== null) proxy.mtu = mtu;
   const psk = getKey(peer, 'PresharedKey');
