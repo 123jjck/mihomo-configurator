@@ -247,43 +247,31 @@ function parseWireGuardConfig(text) {
     const hasV15 = hasKey(iface, 'I1');
 
     const o = {};
-    // Fill missing fields with zeros for predictable output.
-    o.jc = toIntMaybe(getKey(iface, 'Jc')) ?? 0;
-    o.jmin = toIntMaybe(getKey(iface, 'Jmin')) ?? 0;
-    o.jmax = toIntMaybe(getKey(iface, 'Jmax')) ?? 0;
-    o.s1 = toIntMaybe(getKey(iface, 'S1')) ?? 0;
-    o.s2 = toIntMaybe(getKey(iface, 'S2')) ?? 0;
-    o.s3 = toIntMaybe(getKey(iface, 'S3')) ?? 0;
-    o.s4 = toIntMaybe(getKey(iface, 'S4')) ?? 0;
-    o.h1 = h1 ?? 0;
-    o.h2 = h2 ?? 0;
-    o.h3 = h3 ?? 0;
-    o.h4 = h4 ?? 0;
+    // Only include fields that are explicitly present in the source config.
+    if (hasKey(iface, 'Jc')) o.jc = toIntMaybe(getKey(iface, 'Jc')) ?? 0;
+    if (hasKey(iface, 'Jmin')) o.jmin = toIntMaybe(getKey(iface, 'Jmin')) ?? 0;
+    if (hasKey(iface, 'Jmax')) o.jmax = toIntMaybe(getKey(iface, 'Jmax')) ?? 0;
+    if (hasKey(iface, 'S1')) o.s1 = toIntMaybe(getKey(iface, 'S1')) ?? 0;
+    if (hasKey(iface, 'S2')) o.s2 = toIntMaybe(getKey(iface, 'S2')) ?? 0;
+    if (hasKey(iface, 'S3')) o.s3 = toIntMaybe(getKey(iface, 'S3')) ?? 0;
+    if (hasKey(iface, 'S4')) o.s4 = toIntMaybe(getKey(iface, 'S4')) ?? 0;
+    if (hasKey(iface, 'H1')) o.h1 = h1 ?? 0;
+    if (hasKey(iface, 'H2')) o.h2 = h2 ?? 0;
+    if (hasKey(iface, 'H3')) o.h3 = h3 ?? 0;
+    if (hasKey(iface, 'H4')) o.h4 = h4 ?? 0;
 
     // AmneziaWG v1.5 additional options.
     // v1.5 is detected by presence of I1 (case-insensitive). If I1 is absent, it behaves as v1.0.
     if (hasV15) {
-      const i1 = normalizeWgValue(getKey(iface, 'I1'));
-      const i2 = normalizeWgValue(getKey(iface, 'I2'));
-      const i3 = normalizeWgValue(getKey(iface, 'I3'));
-      const i4 = normalizeWgValue(getKey(iface, 'I4'));
-      const i5 = normalizeWgValue(getKey(iface, 'I5'));
-      const j1 = normalizeWgValue(getKey(iface, 'J1'));
-      const j2 = normalizeWgValue(getKey(iface, 'J2'));
-      const j3 = normalizeWgValue(getKey(iface, 'J3'));
-      const itimeRaw = getKey(iface, 'Itime');
-      const itime = toIntMaybe(itimeRaw) ?? 0;
-
-      // CPS strings: default to empty string when omitted.
-      o.i1 = i1;
-      o.i2 = hasKey(iface, 'I2') ? i2 : '';
-      o.i3 = hasKey(iface, 'I3') ? i3 : '';
-      o.i4 = hasKey(iface, 'I4') ? i4 : '';
-      o.i5 = hasKey(iface, 'I5') ? i5 : '';
-      o.j1 = hasKey(iface, 'J1') ? j1 : '';
-      o.j2 = hasKey(iface, 'J2') ? j2 : '';
-      o.j3 = hasKey(iface, 'J3') ? j3 : '';
-      o.itime = itime;
+      o.i1 = normalizeWgValue(getKey(iface, 'I1'));
+      if (hasKey(iface, 'I2')) o.i2 = normalizeWgValue(getKey(iface, 'I2'));
+      if (hasKey(iface, 'I3')) o.i3 = normalizeWgValue(getKey(iface, 'I3'));
+      if (hasKey(iface, 'I4')) o.i4 = normalizeWgValue(getKey(iface, 'I4'));
+      if (hasKey(iface, 'I5')) o.i5 = normalizeWgValue(getKey(iface, 'I5'));
+      if (hasKey(iface, 'J1')) o.j1 = normalizeWgValue(getKey(iface, 'J1'));
+      if (hasKey(iface, 'J2')) o.j2 = normalizeWgValue(getKey(iface, 'J2'));
+      if (hasKey(iface, 'J3')) o.j3 = normalizeWgValue(getKey(iface, 'J3'));
+      if (hasKey(iface, 'Itime')) o.itime = toIntMaybe(getKey(iface, 'Itime')) ?? 0;
     }
     proxy.awgVersion = hasV20 ? '2.0' : (hasV15 ? '1.5' : '1.0');
     proxy['amnezia-wg-option'] = o;
