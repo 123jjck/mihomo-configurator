@@ -27,6 +27,11 @@ function proxyToYaml(p) {
       if (p.servername) y += `    servername: ${q(p.servername)}\n`;
       if (p['client-fingerprint']) y += `    client-fingerprint: ${p['client-fingerprint']}\n`;
       if (p.flow) y += `    flow: ${p.flow}\n`;
+      if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
+      if (p.alpn && p.alpn.length) {
+        y += `    alpn:\n`;
+        for (const a of p.alpn) y += `      - ${q(a)}\n`;
+      }
       if (p['reality-opts']) {
         y += `    reality-opts:\n`;
         if (p['reality-opts']['public-key']) y += `      public-key: ${p['reality-opts']['public-key']}\n`;
@@ -35,6 +40,7 @@ function proxyToYaml(p) {
       if (p['ws-opts']) {
         y += `    ws-opts:\n`;
         y += `      path: ${q(p['ws-opts'].path)}\n`;
+        if (p['ws-opts']['v2ray-http-upgrade']) y += `      v2ray-http-upgrade: true\n`;
         if (p['ws-opts'].headers) {
           y += `      headers:\n`;
           for (const [k, v] of Object.entries(p['ws-opts'].headers))

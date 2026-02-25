@@ -10,6 +10,8 @@ function buildVlessProxy({
   security = '',
   servername = '',
   flow = '',
+  skipCertVerify = false,
+  alpn = [],
   fingerprint = '',
   realityPublicKey = '',
   realityShortId = '',
@@ -22,13 +24,18 @@ function buildVlessProxy({
   if (!name || !server || !Number.isFinite(+port) || !uuid) return null;
 
   const proxy = { name, type: 'vless', server, port: +port, uuid, udp: true };
-  const net = network || 'tcp';
+  const rawNet = String(network || 'tcp').toLowerCase();
+  const isHttpUpgrade = rawNet === 'httpupgrade' || rawNet === 'http-upgrade';
+  const net = isHttpUpgrade ? 'ws' : rawNet;
   proxy.network = net;
 
   const sec = security || '';
   if (sec === 'tls' || sec === 'reality') proxy.tls = true;
   if (servername) proxy.servername = servername;
   if (flow) proxy.flow = flow;
+  if (skipCertVerify) proxy['skip-cert-verify'] = true;
+  const alpnList = (Array.isArray(alpn) ? alpn : [alpn]).map(v => String(v).trim()).filter(Boolean);
+  if (alpnList.length) proxy.alpn = alpnList;
 
   if (fingerprint) {
     proxy['client-fingerprint'] = fingerprint;
@@ -46,6 +53,7 @@ function buildVlessProxy({
 
   if (net === 'ws') {
     proxy['ws-opts'] = { path: wsPath || '/' };
+    if (isHttpUpgrade) proxy['ws-opts']['v2ray-http-upgrade'] = true;
     if (wsHost) proxy['ws-opts'].headers = { Host: wsHost };
   } else if (net === 'grpc') {
     proxy['grpc-opts'] = { 'grpc-service-name': grpcServiceName || '' };
@@ -62,6 +70,8 @@ function parseVless(url) {
   if (!m) return null;
   const [, uuid, server, port, qs, rawName] = m;
   const p = new URLSearchParams(qs);
+  const boolish = value => ['1', 'true', 'yes'].includes(String(value || '').trim().toLowerCase());
+  const alpn = (p.get('alpn') || '').split(',').map(v => v.trim()).filter(Boolean);
   const name = rawName ? decodeURIComponent(rawName) : 'vless-' + server;
   return buildVlessProxy({
     name,
@@ -72,6 +82,8 @@ function parseVless(url) {
     security: p.get('security') || '',
     servername: p.get('sni') || '',
     flow: p.get('flow') || '',
+    skipCertVerify: boolish(p.get('allowInsecure')) || boolish(p.get('insecure')),
+    alpn,
     fingerprint: p.get('fp') || '',
     realityPublicKey: p.get('pbk') || '',
     realityShortId: p.get('sid') || '',
@@ -446,6 +458,8 @@ function parseAmneziaVlessProxy(serverConfig, container) {
     security: stream.security || '',
     servername: reality.serverName || tls.serverName || '',
     flow: user?.flow || '',
+    skipCertVerify: !!tls.allowInsecure || !!reality.allowInsecure,
+    alpn: Array.isArray(tls.alpn) ? tls.alpn : (tls.alpn ? [tls.alpn] : []),
     fingerprint: reality.fingerprint || tls.fingerprint || '',
     realityPublicKey: reality.publicKey || '',
     realityShortId: reality.shortId,
