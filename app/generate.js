@@ -221,8 +221,9 @@ function generateFresh() {
   y += `  sniff:\n`;
   y += `    HTTP:\n`;
   y += `      ports: [80, 8080-8880]\n`;
-  y += `      override-destination: true\n`;
   y += `    TLS:\n`;
+  y += `      ports: [443, 8443]\n`;
+  y += `    QUIC:\n`;
   y += `      ports: [443, 8443]\n`;
   y += `  skip-domain:\n`;
   y += `    - "Mijia Cloud"\n`;
