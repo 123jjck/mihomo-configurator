@@ -8,7 +8,7 @@
 
 ## Возможности
 
-- Добавление прокси по ссылкам: `vless`, `vmess`, `ss`, `trojan`, `hysteria2`/`hy2`, `tuic`
+- Добавление прокси по ссылкам: `vless`, `vmess`, `ss`, `trojan`, `hysteria2`/`hy2`, `tuic`, `vpn://`
 - Добавление WireGuard / AmneziaWG из `.conf` файлов
 - Добавление подписок из URL `https://...`
 - Настройка правил маршрутизации через пресеты (сервисы, CDN-провайдеры, Telegram, `ru-blocked`) и вручную

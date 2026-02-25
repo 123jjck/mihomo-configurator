@@ -1,43 +1,86 @@
 // ============================================================
 // Proxy Parsers (Step 2)
 // ============================================================
+function buildVlessProxy({
+  name,
+  server,
+  port,
+  uuid,
+  network = 'tcp',
+  security = '',
+  servername = '',
+  flow = '',
+  fingerprint = '',
+  realityPublicKey = '',
+  realityShortId = '',
+  wsPath = '/',
+  wsHost = '',
+  grpcServiceName = '',
+  h2Path = '/',
+  h2Host = []
+}) {
+  if (!name || !server || !Number.isFinite(+port) || !uuid) return null;
+
+  const proxy = { name, type: 'vless', server, port: +port, uuid, udp: true };
+  const net = network || 'tcp';
+  proxy.network = net;
+
+  const sec = security || '';
+  if (sec === 'tls' || sec === 'reality') proxy.tls = true;
+  if (servername) proxy.servername = servername;
+  if (flow) proxy.flow = flow;
+
+  if (fingerprint) {
+    proxy['client-fingerprint'] = fingerprint;
+  } else if (proxy.tls) {
+    proxy['client-fingerprint'] = 'chrome';
+  }
+
+  if (sec === 'reality') {
+    proxy['reality-opts'] = {};
+    if (realityPublicKey) proxy['reality-opts']['public-key'] = realityPublicKey;
+    if (realityShortId !== undefined && realityShortId !== null && String(realityShortId) !== '') {
+      proxy['reality-opts']['short-id'] = String(realityShortId);
+    }
+  }
+
+  if (net === 'ws') {
+    proxy['ws-opts'] = { path: wsPath || '/' };
+    if (wsHost) proxy['ws-opts'].headers = { Host: wsHost };
+  } else if (net === 'grpc') {
+    proxy['grpc-opts'] = { 'grpc-service-name': grpcServiceName || '' };
+  } else if (net === 'h2' || net === 'http') {
+    const host = Array.isArray(h2Host) ? h2Host : [h2Host || server];
+    proxy['h2-opts'] = { path: h2Path || '/', host: host.filter(Boolean) };
+  }
+
+  return proxy;
+}
+
 function parseVless(url) {
   const m = url.match(/^vless:\/\/([^@]+)@([^:]+):(\d+)\??([^#]*)(?:#(.*))?$/);
   if (!m) return null;
   const [, uuid, server, port, qs, rawName] = m;
   const p = new URLSearchParams(qs);
   const name = rawName ? decodeURIComponent(rawName) : 'vless-' + server;
-  const proxy = { name, type: 'vless', server, port: +port, uuid, udp: true };
-
-  const net = p.get('type') || 'tcp';
-  proxy.network = net;
-
-  const sec = p.get('security') || '';
-  if (sec === 'tls' || sec === 'reality') proxy.tls = true;
-  if (p.get('sni')) proxy.servername = p.get('sni');
-  if (p.get('fp')) {
-    proxy['client-fingerprint'] = p.get('fp');
-  } else if (sec === 'tls' || sec === 'reality') {
-    // Auto-add default client-fingerprint for TLS/reality connections
-    proxy['client-fingerprint'] = 'chrome';
-  }
-  if (p.get('flow')) proxy.flow = p.get('flow');
-
-  if (sec === 'reality') {
-    proxy['reality-opts'] = {};
-    if (p.get('pbk')) proxy['reality-opts']['public-key'] = p.get('pbk');
-    if (p.get('sid')) proxy['reality-opts']['short-id'] = p.get('sid');
-  }
-
-  if (net === 'ws') {
-    proxy['ws-opts'] = { path: p.get('path') || '/' };
-    if (p.get('host')) proxy['ws-opts'].headers = { Host: p.get('host') };
-  } else if (net === 'grpc') {
-    proxy['grpc-opts'] = { 'grpc-service-name': p.get('serviceName') || '' };
-  } else if (net === 'h2') {
-    proxy['h2-opts'] = { path: p.get('path') || '/', host: [p.get('host') || server] };
-  }
-  return proxy;
+  return buildVlessProxy({
+    name,
+    server,
+    port: +port,
+    uuid,
+    network: p.get('type') || 'tcp',
+    security: p.get('security') || '',
+    servername: p.get('sni') || '',
+    flow: p.get('flow') || '',
+    fingerprint: p.get('fp') || '',
+    realityPublicKey: p.get('pbk') || '',
+    realityShortId: p.get('sid') || '',
+    wsPath: p.get('path') || '/',
+    wsHost: p.get('host') || '',
+    grpcServiceName: p.get('serviceName') || '',
+    h2Path: p.get('path') || '/',
+    h2Host: [p.get('host') || server]
+  });
 }
 
 function parseVmess(url) {
@@ -149,48 +192,332 @@ function parseTuic(url) {
   return proxy;
 }
 
-function parseWireGuardConfig(text) {
-  function normalizeWgValue(v) {
-    v = String(v ?? '').trim();
-    if (v === '""' || v === "''") return '';
-    return v;
+function parseJsonObject(text) {
+  if (typeof text !== 'string') return null;
+  try {
+    const obj = JSON.parse(text);
+    if (!obj || Array.isArray(obj) || typeof obj !== 'object') return null;
+    return obj;
+  } catch {
+    return null;
   }
-  function getKey(obj, k) {
-    return obj[k] ?? obj[k.toUpperCase()] ?? obj[k.toLowerCase()];
+}
+
+function parseJsonObjectMaybe(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  return parseJsonObject(String(value ?? ''));
+}
+
+function decodeBase64UrlToBytes(input) {
+  let b64 = String(input ?? '').trim();
+  if (!b64) return null;
+  b64 = b64.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+  b64 += '='.repeat((4 - (b64.length % 4)) % 4);
+  let bin;
+  try {
+    bin = atob(b64);
+  } catch {
+    return null;
   }
-  function hasKey(obj, k) {
-    return getKey(obj, k) !== undefined;
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function decodeUtf8(bytes) {
+  try {
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return '';
   }
-  function toIntMaybe(v) {
-    v = normalizeWgValue(v);
-    if (!v) return null;
-    if (!/^\d+$/.test(v)) return null;
-    return +v;
+}
+
+function withTimeoutOrNull(promise, timeoutMs) {
+  return new Promise(resolve => {
+    const timer = setTimeout(() => resolve(null), timeoutMs);
+    Promise.resolve(promise)
+      .then(value => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        resolve(null);
+      });
+  });
+}
+
+async function inflateZlib(bytes) {
+  if (!bytes || !bytes.length) return null;
+  if (typeof DecompressionStream === 'undefined') return null;
+  return withTimeoutOrNull((async () => {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
+    const inflated = await new Response(stream).arrayBuffer();
+    return new Uint8Array(inflated);
+  })(), 5000);
+}
+
+function normalizeAwgValue(v) {
+  v = String(v ?? '').trim();
+  if (v === '""' || v === "''") return '';
+  return v;
+}
+
+function getAwgKey(obj, k) {
+  return obj?.[k] ?? obj?.[k.toUpperCase()] ?? obj?.[k.toLowerCase()];
+}
+
+function hasAwgKey(obj, k) {
+  return getAwgKey(obj, k) !== undefined;
+}
+
+function toIntMaybe(v) {
+  v = normalizeAwgValue(v);
+  if (!v || !/^\d+$/.test(v)) return null;
+  return +v;
+}
+
+function toIntOrRangeMaybe(v) {
+  v = normalizeAwgValue(v);
+  if (!v) return null;
+  if (/^\d+$/.test(v)) return +v;
+  const m = v.match(/^(\d+)\s*-\s*(\d+)$/);
+  if (!m) return null;
+  return `${m[1]}-${m[2]}`;
+}
+
+function normalizeAwgVersion(rawVersion, hasV20, hasV15) {
+  const v = String(rawVersion ?? '').trim().toLowerCase();
+  if (v === '2' || v === '2.0') return '2.0';
+  if (v === '1.5') return '1.5';
+  if (v === '1' || v === '1.0') return '1.0';
+  return hasV20 ? '2.0' : (hasV15 ? '1.5' : '1.0');
+}
+
+function hasAnyAwgKey(obj) {
+  const keys = [
+    'Jc','Jmin','Jmax',
+    'S1','S2','S3','S4',
+    'H1','H2','H3','H4',
+    'I1','I2','I3','I4','I5',
+    'J1','J2','J3',
+    'Itime'
+  ];
+  for (const k of keys) {
+    if (hasAwgKey(obj, k)) return true;
   }
-  function toIntOrRangeMaybe(v) {
-    v = normalizeWgValue(v);
-    if (!v) return null;
-    if (/^\d+$/.test(v)) return +v;
-    const m = v.match(/^(\d+)\s*-\s*(\d+)$/);
-    if (!m) return null;
-    return `${m[1]}-${m[2]}`;
-  }
-  function hasAnyAwgKey(obj) {
-    // Detect AmneziaWG even when only v1.5 CPS fields are present (e.g. just i1).
-    const keys = [
-      'Jc','Jmin','Jmax',
-      'S1','S2','S3','S4',
-      'H1','H2','H3','H4',
-      'I1','I2','I3','I4','I5',
-      'J1','J2','J3',
-      'Itime'
-    ];
-    for (const k of keys) {
-      if (hasKey(obj, k)) return true;
-    }
-    return false;
+  return false;
+}
+
+function collectAwgOptions(obj) {
+  const h1 = toIntOrRangeMaybe(getAwgKey(obj, 'H1'));
+  const h2 = toIntOrRangeMaybe(getAwgKey(obj, 'H2'));
+  const h3 = toIntOrRangeMaybe(getAwgKey(obj, 'H3'));
+  const h4 = toIntOrRangeMaybe(getAwgKey(obj, 'H4'));
+  const hasV20 =
+    hasAwgKey(obj, 'S3') || hasAwgKey(obj, 'S4') ||
+    [h1, h2, h3, h4].some(v => typeof v === 'string');
+  const hasV15 = hasAwgKey(obj, 'I1');
+
+  const awg = {};
+  if (hasAwgKey(obj, 'Jc')) awg.jc = toIntMaybe(getAwgKey(obj, 'Jc')) ?? 0;
+  if (hasAwgKey(obj, 'Jmin')) awg.jmin = toIntMaybe(getAwgKey(obj, 'Jmin')) ?? 0;
+  if (hasAwgKey(obj, 'Jmax')) awg.jmax = toIntMaybe(getAwgKey(obj, 'Jmax')) ?? 0;
+  if (hasAwgKey(obj, 'S1')) awg.s1 = toIntMaybe(getAwgKey(obj, 'S1')) ?? 0;
+  if (hasAwgKey(obj, 'S2')) awg.s2 = toIntMaybe(getAwgKey(obj, 'S2')) ?? 0;
+  if (hasAwgKey(obj, 'S3')) awg.s3 = toIntMaybe(getAwgKey(obj, 'S3')) ?? 0;
+  if (hasAwgKey(obj, 'S4')) awg.s4 = toIntMaybe(getAwgKey(obj, 'S4')) ?? 0;
+  if (hasAwgKey(obj, 'H1')) awg.h1 = h1 ?? 0;
+  if (hasAwgKey(obj, 'H2')) awg.h2 = h2 ?? 0;
+  if (hasAwgKey(obj, 'H3')) awg.h3 = h3 ?? 0;
+  if (hasAwgKey(obj, 'H4')) awg.h4 = h4 ?? 0;
+
+  if (hasV15) {
+    awg.i1 = normalizeAwgValue(getAwgKey(obj, 'I1'));
+    if (hasAwgKey(obj, 'I2')) awg.i2 = normalizeAwgValue(getAwgKey(obj, 'I2'));
+    if (hasAwgKey(obj, 'I3')) awg.i3 = normalizeAwgValue(getAwgKey(obj, 'I3'));
+    if (hasAwgKey(obj, 'I4')) awg.i4 = normalizeAwgValue(getAwgKey(obj, 'I4'));
+    if (hasAwgKey(obj, 'I5')) awg.i5 = normalizeAwgValue(getAwgKey(obj, 'I5'));
+    if (hasAwgKey(obj, 'J1')) awg.j1 = normalizeAwgValue(getAwgKey(obj, 'J1'));
+    if (hasAwgKey(obj, 'J2')) awg.j2 = normalizeAwgValue(getAwgKey(obj, 'J2'));
+    if (hasAwgKey(obj, 'J3')) awg.j3 = normalizeAwgValue(getAwgKey(obj, 'J3'));
+    if (hasAwgKey(obj, 'Itime')) awg.itime = toIntMaybe(getAwgKey(obj, 'Itime')) ?? 0;
   }
 
+  return { awg, hasV20, hasV15 };
+}
+
+function parseAmneziaWireGuardBaseProxy(serverConfig, protocolConfig, clientConfig, namePrefix) {
+  const server = String(clientConfig.hostName || serverConfig.hostName || '').trim();
+  const port = Number(clientConfig.port ?? protocolConfig.port);
+  const privateKey = String(clientConfig.client_priv_key || '').trim();
+  const publicKey = String(clientConfig.server_pub_key || '').trim();
+  if (!server || !Number.isFinite(port) || !privateKey || !publicKey) return null;
+
+  const ipRaw = String(clientConfig.client_ip || '').trim();
+  const ip = (ipRaw ? ipRaw.split(',')[0] : '10.0.0.2').split('/')[0].trim() || '10.0.0.2';
+  const name = String(serverConfig.description || '').trim() || `${namePrefix}-${server}`;
+
+  const proxy = {
+    name,
+    type: 'wireguard',
+    server,
+    port,
+    ip,
+    'private-key': privateKey,
+    'public-key': publicKey,
+    udp: true
+  };
+
+  const psk = String(clientConfig.psk_key || '').trim();
+  if (psk) proxy['pre-shared-key'] = psk;
+  const mtu = toIntMaybe(clientConfig.mtu);
+  if (mtu !== null) proxy.mtu = mtu;
+
+  const dns1 = String(serverConfig.dns1 || '').trim();
+  if (dns1) {
+    proxy.dns = [dns1];
+  } else {
+    const cfgText = String(clientConfig.config || '');
+    const mDns = cfgText.match(/^\s*DNS\s*=\s*([^\r\n]+)/im);
+    if (mDns && mDns[1]) {
+      const firstDns = mDns[1].split(',')[0].trim();
+      if (firstDns) proxy.dns = [firstDns];
+    }
+  }
+
+  return proxy;
+}
+
+function parseAmneziaWireGuardProxy(serverConfig, container) {
+  const protocolConfig = parseJsonObjectMaybe(container?.wireguard);
+  if (!protocolConfig) return null;
+  const clientConfig = parseJsonObjectMaybe(protocolConfig?.last_config);
+  if (!clientConfig) return null;
+  return parseAmneziaWireGuardBaseProxy(serverConfig, protocolConfig, clientConfig, 'wg');
+}
+
+function parseAmneziaAwgProxy(serverConfig, container) {
+  const protocolConfig = parseJsonObjectMaybe(container?.awg);
+  if (!protocolConfig) return null;
+  const clientConfig = parseJsonObjectMaybe(protocolConfig?.last_config);
+  if (!clientConfig) return null;
+  const proxy = parseAmneziaWireGuardBaseProxy(serverConfig, protocolConfig, clientConfig, 'awg');
+  if (!proxy) return null;
+
+  const { awg, hasV20, hasV15 } = collectAwgOptions(clientConfig);
+  const awgVersion = normalizeAwgVersion(protocolConfig.protocol_version, hasV20, hasV15);
+  proxy.awgVersion = awgVersion;
+  proxy['amnezia-wg-option'] = awg;
+
+  return proxy;
+}
+
+function parseAmneziaVlessProxy(serverConfig, container) {
+  const protocolConfig = parseJsonObjectMaybe(container?.xray);
+  if (!protocolConfig) return null;
+  const lastConfig = parseJsonObjectMaybe(protocolConfig?.last_config);
+  if (!lastConfig) return null;
+
+  const outbounds = Array.isArray(lastConfig.outbounds) ? lastConfig.outbounds : [];
+  const outbound = outbounds.find(o => o && o.protocol === 'vless') || outbounds[0];
+  if (!outbound || outbound.protocol !== 'vless') return null;
+
+  const vnext = outbound.settings?.vnext?.[0];
+  const user = vnext?.users?.[0];
+  const server = String(vnext?.address || serverConfig.hostName || '').trim();
+  const port = Number(vnext?.port);
+  const uuid = String(user?.id || '').trim();
+  if (!server || !Number.isFinite(port) || !uuid) return null;
+
+  const stream = outbound.streamSettings || {};
+  const reality = stream.realitySettings || {};
+  const tls = stream.tlsSettings || {};
+  const ws = stream.wsSettings || {};
+  const grpc = stream.grpcSettings || {};
+  const http = stream.httpSettings || {};
+
+  return buildVlessProxy({
+    name: String(serverConfig.description || '').trim() || `vless-${server}`,
+    server,
+    port,
+    uuid,
+    network: stream.network || 'tcp',
+    security: stream.security || '',
+    servername: reality.serverName || tls.serverName || '',
+    flow: user?.flow || '',
+    fingerprint: reality.fingerprint || tls.fingerprint || '',
+    realityPublicKey: reality.publicKey || '',
+    realityShortId: reality.shortId,
+    wsPath: ws.path || '/',
+    wsHost: ws.headers?.Host || ws.headers?.host || '',
+    grpcServiceName: grpc.serviceName || '',
+    h2Path: http.path || '/',
+    h2Host: Array.isArray(http.host) ? http.host : [http.host || server]
+  });
+}
+
+function parseAmneziaVpnJson(serverConfig) {
+  if (!serverConfig || typeof serverConfig !== 'object') return null;
+  const containers = Array.isArray(serverConfig.containers) ? serverConfig.containers : [];
+  if (!containers.length) return null;
+
+  const orderedContainers = [];
+  const defaultContainer = String(serverConfig.defaultContainer || '').toLowerCase();
+  if (defaultContainer) {
+    const preferred = containers.find(c => String(c?.container || '').toLowerCase() === defaultContainer);
+    if (preferred) orderedContainers.push(preferred);
+  }
+  for (const container of containers) {
+    if (!orderedContainers.includes(container)) orderedContainers.push(container);
+  }
+
+  for (const container of orderedContainers) {
+    const containerName = String(container?.container || '').toLowerCase();
+    if (containerName === 'amnezia-awg' || containerName === 'amnezia-awg2') {
+      const awgProxy = parseAmneziaAwgProxy(serverConfig, container);
+      if (awgProxy) return awgProxy;
+      continue;
+    }
+    if (containerName === 'amnezia-wireguard') {
+      const wireGuardProxy = parseAmneziaWireGuardProxy(serverConfig, container);
+      if (wireGuardProxy) return wireGuardProxy;
+      continue;
+    }
+    if (containerName === 'amnezia-xray') {
+      const vlessProxy = parseAmneziaVlessProxy(serverConfig, container);
+      if (vlessProxy) return vlessProxy;
+    }
+  }
+  return null;
+}
+
+async function parseAmneziaVpnLink(line) {
+  const encoded = line.replace(/^vpn:\/\//i, '').trim();
+  if (!encoded) return null;
+
+  const raw = decodeBase64UrlToBytes(encoded);
+  if (!raw) return null;
+
+  let serverConfig = parseJsonObject(decodeUtf8(raw));
+
+  if (!serverConfig) {
+    let inflated = null;
+    if (raw.length > 4) {
+      inflated = await inflateZlib(raw.slice(4));
+    }
+    if (!inflated) {
+      inflated = await inflateZlib(raw);
+    }
+    if (!inflated) return null;
+    serverConfig = parseJsonObject(decodeUtf8(inflated));
+  }
+
+  if (!serverConfig) return null;
+  return parseAmneziaVpnJson(serverConfig);
+}
+
+function parseWireGuardConfig(text) {
   const lines = text.split(/\r?\n/);
   const iface = {}, peer = {};
   let section = null;
@@ -203,14 +530,14 @@ function parseWireGuardConfig(text) {
     if (!kv) continue;
     (section === 'i' ? iface : peer)[kv[1].trim()] = kv[2].trim();
   }
-  const privateKey = getKey(iface, 'PrivateKey');
-  const publicKey = getKey(peer, 'PublicKey');
-  const endpoint = getKey(peer, 'Endpoint');
+  const privateKey = getAwgKey(iface, 'PrivateKey');
+  const publicKey = getAwgKey(peer, 'PublicKey');
+  const endpoint = getAwgKey(peer, 'Endpoint');
   if (!privateKey || !publicKey || !endpoint) return null;
   const ep = endpoint.match(/^([^:]+):(\d+)$/);
   if (!ep) return null;
   const server = ep[1], port = +ep[2];
-  const address = getKey(iface, 'Address');
+  const address = getAwgKey(iface, 'Address');
   let ip = '10.0.0.2';
   let ipv6 = null;
   if (address) {
@@ -230,58 +557,24 @@ function parseWireGuardConfig(text) {
     udp: true
   };
   if (ipv6) proxy.ipv6 = ipv6;
-  const mtu = toIntMaybe(getKey(iface, 'MTU'));
+  const mtu = toIntMaybe(getAwgKey(iface, 'MTU'));
   if (mtu !== null) proxy.mtu = mtu;
-  const psk = getKey(peer, 'PresharedKey');
+  const psk = getAwgKey(peer, 'PresharedKey');
   if (psk) proxy['pre-shared-key'] = psk;
-  const dns = getKey(iface, 'DNS');
+  const dns = getAwgKey(iface, 'DNS');
   if (dns) proxy.dns = [dns.split(',')[0].trim()];
   if (isAmnezia) {
-    const h1 = toIntOrRangeMaybe(getKey(iface, 'H1'));
-    const h2 = toIntOrRangeMaybe(getKey(iface, 'H2'));
-    const h3 = toIntOrRangeMaybe(getKey(iface, 'H3'));
-    const h4 = toIntOrRangeMaybe(getKey(iface, 'H4'));
-    const hasV20 =
-      hasKey(iface, 'S3') || hasKey(iface, 'S4') ||
-      [h1, h2, h3, h4].some(v => typeof v === 'string');
-    const hasV15 = hasKey(iface, 'I1');
-
-    const o = {};
-    // Only include fields that are explicitly present in the source config.
-    if (hasKey(iface, 'Jc')) o.jc = toIntMaybe(getKey(iface, 'Jc')) ?? 0;
-    if (hasKey(iface, 'Jmin')) o.jmin = toIntMaybe(getKey(iface, 'Jmin')) ?? 0;
-    if (hasKey(iface, 'Jmax')) o.jmax = toIntMaybe(getKey(iface, 'Jmax')) ?? 0;
-    if (hasKey(iface, 'S1')) o.s1 = toIntMaybe(getKey(iface, 'S1')) ?? 0;
-    if (hasKey(iface, 'S2')) o.s2 = toIntMaybe(getKey(iface, 'S2')) ?? 0;
-    if (hasKey(iface, 'S3')) o.s3 = toIntMaybe(getKey(iface, 'S3')) ?? 0;
-    if (hasKey(iface, 'S4')) o.s4 = toIntMaybe(getKey(iface, 'S4')) ?? 0;
-    if (hasKey(iface, 'H1')) o.h1 = h1 ?? 0;
-    if (hasKey(iface, 'H2')) o.h2 = h2 ?? 0;
-    if (hasKey(iface, 'H3')) o.h3 = h3 ?? 0;
-    if (hasKey(iface, 'H4')) o.h4 = h4 ?? 0;
-
-    // AmneziaWG v1.5 additional options.
-    // v1.5 is detected by presence of I1 (case-insensitive). If I1 is absent, it behaves as v1.0.
-    if (hasV15) {
-      o.i1 = normalizeWgValue(getKey(iface, 'I1'));
-      if (hasKey(iface, 'I2')) o.i2 = normalizeWgValue(getKey(iface, 'I2'));
-      if (hasKey(iface, 'I3')) o.i3 = normalizeWgValue(getKey(iface, 'I3'));
-      if (hasKey(iface, 'I4')) o.i4 = normalizeWgValue(getKey(iface, 'I4'));
-      if (hasKey(iface, 'I5')) o.i5 = normalizeWgValue(getKey(iface, 'I5'));
-      if (hasKey(iface, 'J1')) o.j1 = normalizeWgValue(getKey(iface, 'J1'));
-      if (hasKey(iface, 'J2')) o.j2 = normalizeWgValue(getKey(iface, 'J2'));
-      if (hasKey(iface, 'J3')) o.j3 = normalizeWgValue(getKey(iface, 'J3'));
-      if (hasKey(iface, 'Itime')) o.itime = toIntMaybe(getKey(iface, 'Itime')) ?? 0;
-    }
-    proxy.awgVersion = hasV20 ? '2.0' : (hasV15 ? '1.5' : '1.0');
-    proxy['amnezia-wg-option'] = o;
+    const { awg, hasV20, hasV15 } = collectAwgOptions(iface);
+    proxy.awgVersion = normalizeAwgVersion('', hasV20, hasV15);
+    proxy['amnezia-wg-option'] = awg;
   }
   return proxy;
 }
 
-function parseProxyUrl(line) {
+async function parseProxyUrl(line) {
   line = line.trim();
   if (!line) return null;
+  if (/^vpn:\/\//i.test(line)) return await withTimeoutOrNull(parseAmneziaVpnLink(line), 10000);
   if (line.startsWith('vless://')) return parseVless(line);
   if (line.startsWith('vmess://')) return parseVmess(line);
   if (line.startsWith('ss://')) return parseSS(line);

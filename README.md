@@ -8,7 +8,7 @@ Live demo (GitHub Pages): https://123jjck.github.io/mihomo-configurator/
 
 ## Features
 
-- Add proxies from links: `vless`, `vmess`, `ss`, `trojan`, `hysteria2`/`hy2`, `tuic`
+- Add proxies from links: `vless`, `vmess`, `ss`, `trojan`, `hysteria2`/`hy2`, `tuic`, `vpn://`
 - Add WireGuard / AmneziaWG proxies from `.conf` files
 - Add subscription providers from `https://...` URLs
 - Build routing rules with presets (services, CDN providers, Telegram, `ru-blocked`) and manual rules
