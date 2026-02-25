@@ -24,6 +24,7 @@ function proxyToYaml(p) {
       y += `    network: ${p.network || 'tcp'}\n`;
       if (p.tls) y += `    tls: true\n`;
       y += `    udp: true\n`;
+      if (p.encryption) y += `    encryption: ${q(p.encryption)}\n`;
       if (p.servername) y += `    servername: ${q(p.servername)}\n`;
       if (p['client-fingerprint']) y += `    client-fingerprint: ${p['client-fingerprint']}\n`;
       if (p.flow) y += `    flow: ${p.flow}\n`;
@@ -66,15 +67,53 @@ function proxyToYaml(p) {
       if (p.tls) y += `    tls: true\n`;
       y += `    udp: true\n`;
       if (p.servername) y += `    servername: ${q(p.servername)}\n`;
+      if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
+      if (p['client-fingerprint']) y += `    client-fingerprint: ${p['client-fingerprint']}\n`;
+      if (p.fingerprint) y += `    fingerprint: ${q(p.fingerprint)}\n`;
+      if (p.alpn && p.alpn.length) {
+        y += `    alpn:\n`;
+        for (const a of p.alpn) y += `      - ${q(a)}\n`;
+      }
       if (p.network) {
         y += `    network: ${p.network}\n`;
         if (p['ws-opts']) {
           y += `    ws-opts:\n`;
           y += `      path: ${q(p['ws-opts'].path)}\n`;
+          if (p['ws-opts']['v2ray-http-upgrade']) y += `      v2ray-http-upgrade: true\n`;
+          if (p['ws-opts']['v2ray-http-upgrade-fast-open']) y += `      v2ray-http-upgrade-fast-open: true\n`;
+          if (p['ws-opts']['max-early-data']) y += `      max-early-data: ${p['ws-opts']['max-early-data']}\n`;
+          if (p['ws-opts']['early-data-header-name']) y += `      early-data-header-name: ${q(p['ws-opts']['early-data-header-name'])}\n`;
           if (p['ws-opts'].headers) {
             y += `      headers:\n`;
             for (const [k, v] of Object.entries(p['ws-opts'].headers))
               y += `        ${k}: ${q(v)}\n`;
+          }
+        }
+        if (p['http-opts']) {
+          y += `    http-opts:\n`;
+          if (p['http-opts'].method) y += `      method: ${q(p['http-opts'].method)}\n`;
+          if (p['http-opts'].path && p['http-opts'].path.length) {
+            y += `      path:\n`;
+            for (const path of p['http-opts'].path) y += `        - ${q(path)}\n`;
+          }
+          if (p['http-opts'].headers) {
+            y += `      headers:\n`;
+            for (const [k, v] of Object.entries(p['http-opts'].headers)) {
+              if (Array.isArray(v)) {
+                y += `        ${k}:\n`;
+                for (const vv of v) y += `          - ${q(vv)}\n`;
+              } else {
+                y += `        ${k}: ${q(v)}\n`;
+              }
+            }
+          }
+        }
+        if (p['h2-opts']) {
+          y += `    h2-opts:\n`;
+          y += `      path: ${q(p['h2-opts'].path)}\n`;
+          if (p['h2-opts'].host && p['h2-opts'].host.length) {
+            y += `      host:\n`;
+            for (const h of p['h2-opts'].host) y += `        - ${q(h)}\n`;
           }
         }
         if (p['grpc-opts']) {
@@ -88,6 +127,18 @@ function proxyToYaml(p) {
       y += `    cipher: ${p.cipher}\n`;
       y += `    password: ${q(p.password)}\n`;
       y += `    udp: true\n`;
+      if (p['udp-over-tcp']) y += `    udp-over-tcp: true\n`;
+      if (p.plugin) y += `    plugin: ${q(p.plugin)}\n`;
+      if (p['plugin-opts']) {
+        y += `    plugin-opts:\n`;
+        for (const [k, v] of Object.entries(p['plugin-opts'])) {
+          if (typeof v === 'boolean') {
+            y += `      ${k}: ${v ? 'true' : 'false'}\n`;
+          } else {
+            y += `      ${k}: ${q(v)}\n`;
+          }
+        }
+      }
       break;
 
     case 'trojan':
@@ -95,11 +146,18 @@ function proxyToYaml(p) {
       y += `    udp: true\n`;
       if (p.sni) y += `    sni: ${q(p.sni)}\n`;
       if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
+      if (p['client-fingerprint']) y += `    client-fingerprint: ${p['client-fingerprint']}\n`;
+      if (p.fingerprint) y += `    fingerprint: ${q(p.fingerprint)}\n`;
+      if (p.alpn && p.alpn.length) {
+        y += `    alpn:\n`;
+        for (const a of p.alpn) y += `      - ${q(a)}\n`;
+      }
       if (p.network) {
         y += `    network: ${p.network}\n`;
         if (p['ws-opts']) {
           y += `    ws-opts:\n`;
           y += `      path: ${q(p['ws-opts'].path)}\n`;
+          if (p['ws-opts']['v2ray-http-upgrade']) y += `      v2ray-http-upgrade: true\n`;
           if (p['ws-opts'].headers) {
             y += `      headers:\n`;
             for (const [k, v] of Object.entries(p['ws-opts'].headers))
@@ -114,21 +172,31 @@ function proxyToYaml(p) {
       break;
 
     case 'hysteria2':
-      y += `    password: ${q(p.password)}\n`;
+      if (p.password) y += `    password: ${q(p.password)}\n`;
       if (p.sni) y += `    sni: ${q(p.sni)}\n`;
       if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
       if (p.obfs) y += `    obfs: ${p.obfs}\n`;
       if (p['obfs-password']) y += `    obfs-password: ${q(p['obfs-password'])}\n`;
+      if (p.fingerprint) y += `    fingerprint: ${q(p.fingerprint)}\n`;
+      if (p.alpn && p.alpn.length) {
+        y += `    alpn:\n`;
+        for (const a of p.alpn) y += `      - ${q(a)}\n`;
+      }
+      if (p.up) y += `    up: ${q(p.up)}\n`;
+      if (p.down) y += `    down: ${q(p.down)}\n`;
       break;
 
     case 'tuic':
-      y += `    uuid: ${p.uuid}\n`;
-      y += `    password: ${q(p.password)}\n`;
+      if (p.uuid) y += `    uuid: ${q(p.uuid)}\n`;
+      if (p.password) y += `    password: ${q(p.password)}\n`;
+      if (p.token) y += `    token: ${q(p.token)}\n`;
+      if (p.udp) y += `    udp: true\n`;
       if (p.sni) y += `    sni: ${q(p.sni)}\n`;
-      if (p.alpn) {
+      if (p.alpn && p.alpn.length) {
         y += `    alpn:\n`;
-        for (const a of p.alpn) y += `      - ${a}\n`;
+        for (const a of p.alpn) y += `      - ${q(a)}\n`;
       }
+      if (p['disable-sni']) y += `    disable-sni: true\n`;
       if (p['congestion-controller']) y += `    congestion-controller: ${p['congestion-controller']}\n`;
       if (p['udp-relay-mode']) y += `    udp-relay-mode: ${p['udp-relay-mode']}\n`;
       break;

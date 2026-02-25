@@ -65,25 +65,65 @@ function buildVlessProxy({
   return proxy;
 }
 
-function parseVless(url) {
-  const m = url.match(/^vless:\/\/([^@]+)@([^:]+):(\d+)\??([^#]*)(?:#(.*))?$/);
-  if (!m) return null;
-  const [, uuid, server, port, qs, rawName] = m;
-  const p = new URLSearchParams(qs);
-  const boolish = value => ['1', 'true', 'yes'].includes(String(value || '').trim().toLowerCase());
-  const alpn = (p.get('alpn') || '').split(',').map(v => v.trim()).filter(Boolean);
-  const name = rawName ? decodeURIComponent(rawName) : 'vless-' + server;
-  return buildVlessProxy({
-    name,
+function parseUrlOrNull(raw) {
+  try {
+    return new URL(raw);
+  } catch {
+    return null;
+  }
+}
+
+function decodeURIComponentSafe(value) {
+  const s = String(value ?? '');
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+function decodeBase64Compat(value) {
+  let b64 = String(value ?? '').trim();
+  if (!b64) return null;
+  b64 = b64.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+  b64 += '='.repeat((4 - (b64.length % 4)) % 4);
+  try {
+    return atob(b64);
+  } catch {
+    return null;
+  }
+}
+
+function parseBoolish(value) {
+  const v = String(value ?? '').trim().toLowerCase();
+  if (!v) return false;
+  return ['1', 'true', 't', 'yes', 'y', 'on'].includes(v);
+}
+
+function parseCsv(value) {
+  return String(value ?? '').split(',').map(v => v.trim()).filter(Boolean);
+}
+
+function parseVless(rawUrl) {
+  const u = parseUrlOrNull(rawUrl);
+  if (!u || u.protocol !== 'vless:') return null;
+  const server = u.hostname;
+  const port = Number(u.port);
+  const uuid = decodeURIComponentSafe(u.username);
+  if (!server || !Number.isFinite(port) || !uuid) return null;
+
+  const p = u.searchParams;
+  const proxy = buildVlessProxy({
+    name: u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `vless-${server}`,
     server,
-    port: +port,
+    port,
     uuid,
     network: p.get('type') || 'tcp',
     security: p.get('security') || '',
     servername: p.get('sni') || '',
     flow: p.get('flow') || '',
-    skipCertVerify: boolish(p.get('allowInsecure')) || boolish(p.get('insecure')),
-    alpn,
+    skipCertVerify: parseBoolish(p.get('allowInsecure')) || parseBoolish(p.get('insecure')),
+    alpn: parseCsv(p.get('alpn')),
     fingerprint: p.get('fp') || '',
     realityPublicKey: p.get('pbk') || '',
     realityShortId: p.get('sid') || '',
@@ -93,76 +133,242 @@ function parseVless(url) {
     h2Path: p.get('path') || '/',
     h2Host: [p.get('host') || server]
   });
+  if (!proxy) return null;
+  const encryption = p.get('encryption');
+  if (encryption) proxy.encryption = encryption;
+  return proxy;
 }
 
-function parseVmess(url) {
-  const b64 = url.replace(/^vmess:\/\//, '');
-  let json;
-  try { json = JSON.parse(atob(b64.replace(/-/g,'+').replace(/_/g,'/'))); } catch { return null; }
-  const name = json.ps || 'vmess-' + json.add;
+function parseVmessLegacyFromJson(json) {
+  const server = String(json.add || '').trim();
+  const port = Number(json.port);
+  const uuid = String(json.id || '').trim();
+  if (!server || !Number.isFinite(port) || !uuid) return null;
+
+  const name = String(json.ps || '').trim() || `vmess-${server}`;
   const proxy = {
-    name, type: 'vmess', server: json.add, port: +json.port,
-    uuid: json.id, alterId: +(json.aid || 0), cipher: json.scy || 'auto', udp: true
+    name,
+    type: 'vmess',
+    server,
+    port,
+    uuid,
+    alterId: Number(json.aid || 0),
+    cipher: json.scy || 'auto',
+    udp: true
   };
-  if (json.tls === 'tls') proxy.tls = true;
-  if (json.sni) proxy.servername = json.sni;
-  const net = json.net || 'tcp';
+
+  const tls = String(json.tls || '').toLowerCase();
+  if (tls.endsWith('tls')) {
+    proxy.tls = true;
+    if (json.alpn) proxy.alpn = parseCsv(json.alpn);
+  }
+  if (json.sni) proxy.servername = String(json.sni);
+  if (json.fp) proxy['client-fingerprint'] = String(json.fp);
+  if (parseBoolish(json.allowInsecure) || parseBoolish(json.insecure)) proxy['skip-cert-verify'] = true;
+
+  let network = String(json.net || 'tcp').toLowerCase();
+  if (String(json.type || '').toLowerCase() === 'http') {
+    network = 'http';
+  } else if (network === 'http') {
+    network = 'h2';
+  }
+  const isHttpUpgrade = network === 'httpupgrade' || network === 'http-upgrade';
+  const net = isHttpUpgrade ? 'ws' : network;
   if (net !== 'tcp') proxy.network = net;
-  if (net === 'ws') {
+
+  if (network === 'http') {
+    const hostList = parseCsv(json.host);
+    proxy['http-opts'] = { path: [json.path || '/'] };
+    if (hostList.length) proxy['http-opts'].headers = { Host: hostList };
+  } else if (net === 'h2') {
+    proxy['h2-opts'] = { path: json.path || '/' };
+    const hostList = parseCsv(json.host);
+    if (hostList.length) proxy['h2-opts'].host = hostList;
+  } else if (net === 'ws') {
     proxy['ws-opts'] = { path: json.path || '/' };
-    if (json.host) proxy['ws-opts'].headers = { Host: json.host };
+    if (isHttpUpgrade) proxy['ws-opts']['v2ray-http-upgrade'] = true;
+    if (json.host) proxy['ws-opts'].headers = { Host: String(json.host) };
   } else if (net === 'grpc') {
     proxy['grpc-opts'] = { 'grpc-service-name': json.path || '' };
+  }
+
+  return proxy;
+}
+
+function parseVmessUrl(rawUrl) {
+  const u = parseUrlOrNull(rawUrl);
+  if (!u || u.protocol !== 'vmess:') return null;
+  const server = u.hostname;
+  const port = Number(u.port);
+  const uuid = decodeURIComponentSafe(u.username);
+  if (!server || !Number.isFinite(port) || !uuid) return null;
+
+  const p = u.searchParams;
+  const proxy = {
+    name: u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `vmess-${server}`,
+    type: 'vmess',
+    server,
+    port,
+    uuid,
+    alterId: 0,
+    cipher: p.get('encryption') || 'auto',
+    udp: true
+  };
+
+  const security = String(p.get('security') || '').toLowerCase();
+  if (security.endsWith('tls') || security === 'reality') {
+    proxy.tls = true;
+    proxy['client-fingerprint'] = p.get('fp') || 'chrome';
+    const alpn = parseCsv(p.get('alpn'));
+    if (alpn.length) proxy.alpn = alpn;
+    if (p.get('pcs')) proxy.fingerprint = p.get('pcs');
+  }
+  if (p.get('sni')) proxy.servername = p.get('sni');
+  if (parseBoolish(p.get('allowInsecure')) || parseBoolish(p.get('insecure'))) proxy['skip-cert-verify'] = true;
+
+  let network = String(p.get('type') || 'tcp').toLowerCase();
+  const fakeType = String(p.get('headerType') || '').toLowerCase();
+  if (fakeType === 'http') {
+    network = 'http';
+  } else if (network === 'http') {
+    network = 'h2';
+  }
+  const isHttpUpgrade = network === 'httpupgrade' || network === 'http-upgrade';
+  const net = isHttpUpgrade ? 'ws' : network;
+  if (net !== 'tcp') proxy.network = net;
+
+  if (network === 'tcp' && fakeType && fakeType !== 'none') {
+    proxy['http-opts'] = { path: [p.get('path') || '/'] };
+    if (p.get('method')) proxy['http-opts'].method = p.get('method');
+    if (p.get('host')) proxy['http-opts'].headers = { Host: parseCsv(p.get('host')) };
+  } else if (net === 'h2' || network === 'http') {
+    proxy['h2-opts'] = { path: p.get('path') || '/' };
+    if (p.get('host')) proxy['h2-opts'].host = parseCsv(p.get('host'));
+  } else if (net === 'ws') {
+    proxy['ws-opts'] = { path: p.get('path') || '/' };
+    if (isHttpUpgrade) proxy['ws-opts']['v2ray-http-upgrade'] = true;
+    if (p.get('host')) proxy['ws-opts'].headers = { Host: p.get('host') };
+
+    const earlyData = Number(p.get('ed'));
+    if (Number.isFinite(earlyData) && earlyData > 0) {
+      if (isHttpUpgrade) {
+        proxy['ws-opts']['v2ray-http-upgrade-fast-open'] = true;
+      } else {
+        proxy['ws-opts']['max-early-data'] = earlyData;
+        proxy['ws-opts']['early-data-header-name'] = 'Sec-WebSocket-Protocol';
+      }
+    }
+    if (p.get('eh')) proxy['ws-opts']['early-data-header-name'] = p.get('eh');
+  } else if (net === 'grpc') {
+    proxy['grpc-opts'] = { 'grpc-service-name': p.get('serviceName') || '' };
+  }
+
+  return proxy;
+}
+
+function parseVmess(rawUrl) {
+  const b64 = rawUrl.replace(/^vmess:\/\//i, '');
+  const decoded = decodeBase64Compat(b64);
+  if (decoded) {
+    try {
+      const json = JSON.parse(decoded);
+      const legacy = parseVmessLegacyFromJson(json);
+      if (legacy) return legacy;
+    } catch {
+      // vmess may be URL-style, fallback below.
+    }
+  }
+  return parseVmessUrl(rawUrl);
+}
+
+function parseSS(rawUrl) {
+  let u = parseUrlOrNull(rawUrl);
+  if (!u || u.protocol !== 'ss:') return null;
+
+  if (!u.port) {
+    const decoded = decodeBase64Compat(u.host);
+    if (!decoded) return null;
+    const rebuilt = parseUrlOrNull(`ss://${decoded}${u.search}${u.hash}`);
+    if (!rebuilt) return null;
+    u = rebuilt;
+  }
+
+  const server = u.hostname;
+  const port = Number(u.port);
+  if (!server || !Number.isFinite(port)) return null;
+
+  let cipher = decodeURIComponentSafe(u.username);
+  let password = decodeURIComponentSafe(u.password);
+  if (!password) {
+    const decoded = decodeBase64Compat(cipher);
+    if (!decoded) return null;
+    const idx = decoded.indexOf(':');
+    if (idx < 0) return null;
+    cipher = decoded.slice(0, idx);
+    password = decoded.slice(idx + 1);
+  }
+  if (!cipher) return null;
+
+  const name = u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `ss-${server}`;
+  const proxy = { name, type: 'ss', server, port, cipher, password, udp: true };
+  const q = u.searchParams;
+  if (parseBoolish(q.get('udp-over-tcp')) || q.get('uot') === '1') proxy['udp-over-tcp'] = true;
+
+  const plugin = q.get('plugin') || '';
+  if (plugin.includes(';')) {
+    const pluginInfo = new URLSearchParams(`pluginName=${plugin.replace(/;/g, '&')}`);
+    const pluginName = (pluginInfo.get('pluginName') || '').toLowerCase();
+    if (pluginName.includes('obfs')) {
+      proxy.plugin = 'obfs';
+      proxy['plugin-opts'] = {
+        mode: pluginInfo.get('obfs') || '',
+        host: pluginInfo.get('obfs-host') || ''
+      };
+    } else if (pluginName.includes('v2ray-plugin')) {
+      proxy.plugin = 'v2ray-plugin';
+      proxy['plugin-opts'] = {
+        mode: pluginInfo.get('mode') || '',
+        host: pluginInfo.get('host') || '',
+        path: pluginInfo.get('path') || '',
+        tls: /(?:^|;)tls(?:;|$)/.test(plugin)
+      };
+    }
   }
   return proxy;
 }
 
-function parseSS(url) {
-  const raw = url.replace(/^ss:\/\//, '');
-  let method, password, server, port, name;
-  const hashIdx = raw.indexOf('#');
-  name = hashIdx >= 0 ? decodeURIComponent(raw.slice(hashIdx + 1)) : '';
-  const main = hashIdx >= 0 ? raw.slice(0, hashIdx) : raw;
+function parseTrojan(rawUrl) {
+  const u = parseUrlOrNull(rawUrl);
+  if (!u || u.protocol !== 'trojan:') return null;
+  const server = u.hostname;
+  const port = Number(u.port);
+  const password = decodeURIComponentSafe(u.username);
+  if (!server || !Number.isFinite(port) || !password) return null;
 
-  const atIdx = main.indexOf('@');
-  if (atIdx >= 0) {
-    const userInfo = main.slice(0, atIdx);
-    const hostPort = main.slice(atIdx + 1);
-    let decoded;
-    try { decoded = atob(userInfo.replace(/-/g,'+').replace(/_/g,'/')); } catch { decoded = userInfo; }
-    const colonIdx = decoded.indexOf(':');
-    if (colonIdx < 0) return null;
-    method = decoded.slice(0, colonIdx);
-    password = decoded.slice(colonIdx + 1);
-    const hpMatch = hostPort.match(/^([^:]+):(\d+)/);
-    if (!hpMatch) return null;
-    server = hpMatch[1];
-    port = +hpMatch[2];
-  } else {
-    let decoded;
-    try { decoded = atob(main.replace(/-/g,'+').replace(/_/g,'/')); } catch { return null; }
-    const m2 = decoded.match(/^([^:]+):([^@]+)@([^:]+):(\d+)$/);
-    if (!m2) return null;
-    method = m2[1]; password = m2[2]; server = m2[3]; port = +m2[4];
-  }
-  if (!name) name = 'ss-' + server;
-  return { name, type: 'ss', server, port, cipher: method, password, udp: true };
-}
-
-function parseTrojan(url) {
-  const m = url.match(/^trojan:\/\/([^@]+)@([^:]+):(\d+)\??([^#]*)(?:#(.*))?$/);
-  if (!m) return null;
-  const [, password, server, port, qs, rawName] = m;
-  const p = new URLSearchParams(qs);
-  const name = rawName ? decodeURIComponent(rawName) : 'trojan-' + server;
-  const proxy = { name, type: 'trojan', server, port: +port, password: decodeURIComponent(password), udp: true };
+  const p = u.searchParams;
+  const proxy = {
+    name: u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `trojan-${server}`,
+    type: 'trojan',
+    server,
+    port,
+    password,
+    udp: true
+  };
   if (p.get('sni')) proxy.sni = p.get('sni');
-  if (p.get('allowInsecure') === '1' || p.get('insecure') === '1') proxy['skip-cert-verify'] = true;
-  const net = p.get('type') || 'tcp';
+  if (parseBoolish(p.get('allowInsecure')) || parseBoolish(p.get('insecure'))) proxy['skip-cert-verify'] = true;
+  const alpn = parseCsv(p.get('alpn'));
+  if (alpn.length) proxy.alpn = alpn;
+  proxy['client-fingerprint'] = p.get('fp') || 'chrome';
+  if (p.get('pcs')) proxy.fingerprint = p.get('pcs');
+
+  const rawNet = String(p.get('type') || 'tcp').toLowerCase();
+  const isHttpUpgrade = rawNet === 'httpupgrade' || rawNet === 'http-upgrade';
+  const net = isHttpUpgrade ? 'ws' : rawNet;
   if (net !== 'tcp') {
     proxy.network = net;
     if (net === 'ws') {
       proxy['ws-opts'] = { path: p.get('path') || '/' };
+      if (isHttpUpgrade) proxy['ws-opts']['v2ray-http-upgrade'] = true;
       if (p.get('host')) proxy['ws-opts'].headers = { Host: p.get('host') };
     } else if (net === 'grpc') {
       proxy['grpc-opts'] = { 'grpc-service-name': p.get('serviceName') || '' };
@@ -171,36 +377,70 @@ function parseTrojan(url) {
   return proxy;
 }
 
-function parseHysteria2(url) {
-  const m = url.match(/^(?:hysteria2|hy2):\/\/([^@]+)@([^:]+):(\d+)\??([^#]*)(?:#(.*))?$/);
-  if (!m) return null;
-  const [, password, server, port, qs, rawName] = m;
-  const p = new URLSearchParams(qs);
-  const name = rawName ? decodeURIComponent(rawName) : 'hy2-' + server;
-  const proxy = { name, type: 'hysteria2', server, port: +port, password: decodeURIComponent(password) };
+function parseHysteria2(rawUrl) {
+  const u = parseUrlOrNull(rawUrl);
+  if (!u || (u.protocol !== 'hysteria2:' && u.protocol !== 'hy2:')) return null;
+  const server = u.hostname;
+  const port = Number(u.port || 443);
+  if (!server || !Number.isFinite(port)) return null;
+
+  const p = u.searchParams;
+  const proxy = {
+    name: u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `hy2-${server}`,
+    type: 'hysteria2',
+    server,
+    port
+  };
+  const password = decodeURIComponentSafe(u.username);
+  if (password) proxy.password = password;
   if (p.get('sni')) proxy.sni = p.get('sni');
-  if (p.get('insecure') === '1') proxy['skip-cert-verify'] = true;
-  if (p.get('obfs') && p.get('obfs') !== 'none') {
-    proxy.obfs = p.get('obfs');
+  if (parseBoolish(p.get('insecure'))) proxy['skip-cert-verify'] = true;
+  const obfs = p.get('obfs');
+  if (obfs && obfs !== 'none') {
+    proxy.obfs = obfs;
     if (p.get('obfs-password')) proxy['obfs-password'] = p.get('obfs-password');
   }
+  const alpn = parseCsv(p.get('alpn'));
+  if (alpn.length) proxy.alpn = alpn;
+  if (p.get('pinSHA256')) proxy.fingerprint = p.get('pinSHA256');
+  if (p.get('up')) proxy.up = p.get('up');
+  if (p.get('down')) proxy.down = p.get('down');
   return proxy;
 }
 
-function parseTuic(url) {
-  const m = url.match(/^tuic:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\??([^#]*)(?:#(.*))?$/);
-  if (!m) return null;
-  const [, uuid, password, server, port, qs, rawName] = m;
-  const p = new URLSearchParams(qs);
-  const name = rawName ? decodeURIComponent(rawName) : 'tuic-' + server;
+function parseTuic(rawUrl) {
+  const u = parseUrlOrNull(rawUrl);
+  if (!u || u.protocol !== 'tuic:') return null;
+  const server = u.hostname;
+  const port = Number(u.port);
+  if (!server || !Number.isFinite(port)) return null;
+
+  const p = u.searchParams;
   const proxy = {
-    name, type: 'tuic', server, port: +port,
-    uuid: decodeURIComponent(uuid), password: decodeURIComponent(password)
+    name: u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `tuic-${server}`,
+    type: 'tuic',
+    server,
+    port,
+    udp: true
   };
+
+  const username = decodeURIComponentSafe(u.username);
+  const password = decodeURIComponentSafe(u.password);
+  if (password) {
+    proxy.uuid = username;
+    proxy.password = password;
+  } else if (username) {
+    proxy.token = username;
+  } else {
+    return null;
+  }
+
   if (p.get('sni')) proxy.sni = p.get('sni');
-  if (p.get('alpn')) proxy.alpn = p.get('alpn').split(',');
+  const alpn = parseCsv(p.get('alpn'));
+  if (alpn.length) proxy.alpn = alpn;
   if (p.get('congestion_control')) proxy['congestion-controller'] = p.get('congestion_control');
   if (p.get('udp_relay_mode')) proxy['udp-relay-mode'] = p.get('udp_relay_mode');
+  if (parseBoolish(p.get('disable_sni'))) proxy['disable-sni'] = true;
   return proxy;
 }
 
@@ -588,13 +828,14 @@ function parseWireGuardConfig(text) {
 async function parseProxyUrl(line) {
   line = line.trim();
   if (!line) return null;
-  if (/^vpn:\/\//i.test(line)) return await withTimeoutOrNull(parseAmneziaVpnLink(line), 10000);
-  if (line.startsWith('vless://')) return parseVless(line);
-  if (line.startsWith('vmess://')) return parseVmess(line);
-  if (line.startsWith('ss://')) return parseSS(line);
-  if (line.startsWith('trojan://')) return parseTrojan(line);
-  if (line.startsWith('hysteria2://') || line.startsWith('hy2://')) return parseHysteria2(line);
-  if (line.startsWith('tuic://')) return parseTuic(line);
+  const lower = line.toLowerCase();
+  if (lower.startsWith('vpn://')) return await withTimeoutOrNull(parseAmneziaVpnLink(line), 10000);
+  if (lower.startsWith('vless://')) return parseVless(line);
+  if (lower.startsWith('vmess://')) return parseVmess(line);
+  if (lower.startsWith('ss://')) return parseSS(line);
+  if (lower.startsWith('trojan://')) return parseTrojan(line);
+  if (lower.startsWith('hysteria2://') || lower.startsWith('hy2://')) return parseHysteria2(line);
+  if (lower.startsWith('tuic://')) return parseTuic(line);
   return null;
 }
 
