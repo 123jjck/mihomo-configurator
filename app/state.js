@@ -347,7 +347,7 @@ const DNS_DEFAULT_PRESETS = {
 const DNS_NS_PRESETS = {
   quad9:      { label: 'Quad9 DoH/DoT',      servers: ['https://dns.quad9.net/dns-query', 'tls://dns.quad9.net'] },
   cloudflare: { label: 'Cloudflare DoH/DoT', servers: ['https://cloudflare-dns.com/dns-query', 'tls://1dot1dot1dot1.cloudflare-dns.com'] },
-  google:     { label: 'Google DoH/DoT',     servers: ['https://dns.google/dns-query', 'tls://dns.google'] }
+  google:     { label: 'Google DoH/DoT',     servers: ['https://8.8.8.8/dns-query', 'tls://8.8.8.8'] }
 };
 
 // ============================================================
