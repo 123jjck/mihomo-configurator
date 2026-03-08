@@ -355,6 +355,7 @@ const DNS_NS_PRESETS = {
 // ============================================================
 const SERVICE_PRESETS = {
   telegram:  { label: 'Telegram',  rules: [{type:'RULE-SET',payload:'telegram',target:'Proxy'}] },
+  discord:   { label: 'Discord',   rules: [{type:'RULE-SET',payload:'geosite-discord',target:'Proxy'}] },
   youtube:   { label: 'YouTube',   rules: [{type:'RULE-SET',payload:'geosite-youtube',target:'Proxy'}] },
   twitter:   { label: 'Twitter',   rules: [{type:'RULE-SET',payload:'geosite-twitter',target:'Proxy'}] },
   facebook:  { label: 'Facebook',  rules: [{type:'RULE-SET',payload:'geosite-facebook',target:'Proxy'}] },
@@ -362,7 +363,8 @@ const SERVICE_PRESETS = {
   instagram: { label: 'Instagram', rules: [{type:'RULE-SET',payload:'geosite-instagram',target:'Proxy'}] },
   chatgpt:   { label: 'ChatGPT',   rules: [{type:'RULE-SET',payload:'geosite-openai',target:'Proxy'}] },
   gemini:    { label: 'Gemini',    rules: [{type:'RULE-SET',payload:'geosite-google-gemini',target:'Proxy'}] },
-  claude:    { label: 'Claude',    rules: [{type:'RULE-SET',payload:'geosite-anthropic',target:'Proxy'}] }
+  claude:    { label: 'Claude',    rules: [{type:'RULE-SET',payload:'geosite-anthropic',target:'Proxy'}] },
+  roblox:    { label: 'Roblox',    rules: [{type:'RULE-SET',payload:'geosite-roblox',target:'Proxy'}] }
 };
 
 const OTHER_PRESETS = {
@@ -374,6 +376,7 @@ const CDN_PROVIDERS = [
   { id: 'all',          labelKey: 'presetAllCdn' },
   { id: 'akamai',       label: 'Akamai' },
   { id: 'aws',          label: 'AWS' },
+  { id: 'buyvm',        label: 'BuyVM' },
   { id: 'cdn77',        label: 'CDN77' },
   { id: 'cloudflare',   label: 'Cloudflare' },
   { id: 'cogent',       label: 'Cogent' },
@@ -382,10 +385,14 @@ const CDN_PROVIDERS = [
   { id: 'datacamp',     label: 'Datacamp' },
   { id: 'digitalocean', label: 'DigitalOcean' },
   { id: 'fastly',       label: 'Fastly' },
+  { id: 'gcore',        label: 'GCore' },
+  { id: 'glesys',       label: 'GleSYS' },
+  { id: 'gthost',       label: 'GTHost' },
   { id: 'hetzner',      label: 'Hetzner' },
+  { id: 'melbicom',     label: 'MelBiCom' },
   { id: 'oracle',       label: 'Oracle' },
   { id: 'ovh',          label: 'OVH' },
-  { id: 'roblox',       label: 'Roblox' },
+  { id: 'scalaxy',      label: 'Scalaxy' },
   { id: 'scaleway',     label: 'Scaleway' },
   { id: 'vercel',       label: 'Vercel' }
 ];

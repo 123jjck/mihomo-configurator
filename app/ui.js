@@ -383,7 +383,8 @@ function toggleCdn(id) {
 
 function cdnProviderUrl(id) {
   const suffix = state.ipv6 ? '_plain.txt' : '_plain_ipv4.txt';
-  return `https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/refs/heads/main/${id}/${id}${suffix}`;
+  const providerId = id === 'all' ? 'cdn-only' : id;
+  return `https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/refs/heads/main/${providerId}/${providerId}${suffix}`;
 }
 
 function telegramProviderUrl() {
