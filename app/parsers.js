@@ -1,6 +1,59 @@
 // ============================================================
 // Proxy Parsers (Step 2)
 // ============================================================
+function parseXHTTPExtra(extra, opts) {
+  const xmuxToReuse = (xmux) => {
+    const reuse = {};
+    const fields = [
+      ['maxConnections',   'max-connections'],
+      ['maxConcurrency',   'max-concurrency'],
+      ['cMaxReuseTimes',   'c-max-reuse-times'],
+      ['hMaxRequestTimes', 'h-max-request-times'],
+      ['hMaxReusableSecs', 'h-max-reusable-secs'],
+    ];
+    for (const [src, dst] of fields) {
+      const v = xmux[src];
+      if (typeof v === 'string' && v) reuse[dst] = v;
+      else if (typeof v === 'number') reuse[dst] = String(Math.trunc(v));
+    }
+    return reuse;
+  };
+
+  if (extra.noGRPCHeader === true) opts['no-grpc-header'] = true;
+  if (typeof extra.xPaddingBytes === 'string' && extra.xPaddingBytes)
+    opts['x-padding-bytes'] = extra.xPaddingBytes;
+  if (extra.xmux && typeof extra.xmux === 'object') {
+    const reuse = xmuxToReuse(extra.xmux);
+    if (Object.keys(reuse).length > 0) opts['reuse-settings'] = reuse;
+  }
+  if (extra.downloadSettings && typeof extra.downloadSettings === 'object') {
+    const ds = extra.downloadSettings;
+    const dsOpts = {};
+    if (typeof ds.address === 'string' && ds.address) dsOpts['server'] = ds.address;
+    if (typeof ds.port === 'number') dsOpts['port'] = Math.trunc(ds.port);
+    if (typeof ds.security === 'string' && ds.security.toLowerCase() === 'tls') dsOpts['tls'] = true;
+    if (ds.tlsSettings && typeof ds.tlsSettings === 'object') {
+      const tls = ds.tlsSettings;
+      if (typeof tls.serverName === 'string' && tls.serverName) dsOpts['servername'] = tls.serverName;
+      if (typeof tls.fingerprint === 'string' && tls.fingerprint) dsOpts['client-fingerprint'] = tls.fingerprint;
+      if (Array.isArray(tls.alpn) && tls.alpn.length > 0)
+        dsOpts['alpn'] = tls.alpn.filter(a => typeof a === 'string');
+    }
+    if (ds.xhttpSettings && typeof ds.xhttpSettings === 'object') {
+      const xh = ds.xhttpSettings;
+      if (typeof xh.path === 'string' && xh.path) dsOpts['path'] = xh.path;
+      if (typeof xh.host === 'string' && xh.host) dsOpts['host'] = xh.host;
+      if (xh.noGRPCHeader === true) dsOpts['no-grpc-header'] = true;
+      if (typeof xh.xPaddingBytes === 'string' && xh.xPaddingBytes) dsOpts['x-padding-bytes'] = xh.xPaddingBytes;
+      if (xh.extra && typeof xh.extra === 'object' && xh.extra.xmux && typeof xh.extra.xmux === 'object') {
+        const reuse = xmuxToReuse(xh.extra.xmux);
+        if (Object.keys(reuse).length > 0) dsOpts['reuse-settings'] = reuse;
+      }
+    }
+    if (Object.keys(dsOpts).length > 0) opts['download-settings'] = dsOpts;
+  }
+}
+
 function buildVlessProxy({
   name,
   server,
@@ -19,14 +72,19 @@ function buildVlessProxy({
   wsHost = '',
   grpcServiceName = '',
   h2Path = '/',
-  h2Host = []
+  h2Host = [],
+  xhttpPath = '',
+  xhttpHost = '',
+  xhttpMode = '',
+  xhttpExtra = null
 }) {
   if (!name || !server || !Number.isFinite(+port) || !uuid) return null;
 
   const proxy = { name, type: 'vless', server, port: +port, uuid, udp: true };
   const rawNet = String(network || 'tcp').toLowerCase();
   const isHttpUpgrade = rawNet === 'httpupgrade' || rawNet === 'http-upgrade';
-  const net = isHttpUpgrade ? 'ws' : rawNet;
+  const isXhttp = rawNet === 'xhttp' || rawNet === 'splithttp';
+  const net = isHttpUpgrade ? 'ws' : isXhttp ? 'xhttp' : rawNet;
   proxy.network = net;
 
   const sec = security || '';
@@ -60,6 +118,14 @@ function buildVlessProxy({
   } else if (net === 'h2' || net === 'http') {
     const host = Array.isArray(h2Host) ? h2Host : [h2Host || server];
     proxy['h2-opts'] = { path: h2Path || '/', host: host.filter(Boolean) };
+  } else if (net === 'xhttp') {
+    proxy['xhttp-opts'] = {};
+    if (xhttpPath) proxy['xhttp-opts'].path = xhttpPath;
+    if (xhttpHost) proxy['xhttp-opts'].host = xhttpHost;
+    if (xhttpMode) proxy['xhttp-opts'].mode = xhttpMode;
+    if (xhttpExtra && typeof xhttpExtra === 'object') {
+      parseXHTTPExtra(xhttpExtra, proxy['xhttp-opts']);
+    }
   }
 
   return proxy;
@@ -131,7 +197,11 @@ function parseVless(rawUrl) {
     wsHost: p.get('host') || '',
     grpcServiceName: p.get('serviceName') || '',
     h2Path: p.get('path') || '/',
-    h2Host: [p.get('host') || server]
+    h2Host: [p.get('host') || server],
+    xhttpPath: p.get('path') || '',
+    xhttpHost: p.get('host') || '',
+    xhttpMode: p.get('mode') || '',
+    xhttpExtra: (() => { try { return JSON.parse(p.get('extra') || 'null'); } catch { return null; } })()
   });
   if (!proxy) return null;
   const encryption = p.get('encryption');

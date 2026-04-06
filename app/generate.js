@@ -58,6 +58,42 @@ function proxyToYaml(p) {
         y += `      host:\n`;
         for (const h of p['h2-opts'].host) y += `        - ${q(h)}\n`;
       }
+      if (p['xhttp-opts']) {
+        const xo = p['xhttp-opts'];
+        y += `    xhttp-opts:\n`;
+        if (xo.path) y += `      path: ${q(xo.path)}\n`;
+        if (xo.host) y += `      host: ${q(xo.host)}\n`;
+        if (xo.mode) y += `      mode: ${q(xo.mode)}\n`;
+        if (xo['no-grpc-header']) y += `      no-grpc-header: true\n`;
+        if (xo['x-padding-bytes']) y += `      x-padding-bytes: ${q(xo['x-padding-bytes'])}\n`;
+        if (xo['reuse-settings'] && typeof xo['reuse-settings'] === 'object') {
+          y += `      reuse-settings:\n`;
+          for (const [k, v] of Object.entries(xo['reuse-settings']))
+            y += `        ${k}: ${v}\n`;
+        }
+        if (xo['download-settings'] && typeof xo['download-settings'] === 'object') {
+          const ds = xo['download-settings'];
+          y += `      download-settings:\n`;
+          if (ds.server) y += `        server: ${q(ds.server)}\n`;
+          if (ds.port != null) y += `        port: ${ds.port}\n`;
+          if (ds.tls) y += `        tls: true\n`;
+          if (ds.servername) y += `        servername: ${q(ds.servername)}\n`;
+          if (ds['client-fingerprint']) y += `        client-fingerprint: ${q(ds['client-fingerprint'])}\n`;
+          if (Array.isArray(ds.alpn) && ds.alpn.length) {
+            y += `        alpn:\n`;
+            for (const a of ds.alpn) y += `          - ${q(a)}\n`;
+          }
+          if (ds.path) y += `        path: ${q(ds.path)}\n`;
+          if (ds.host) y += `        host: ${q(ds.host)}\n`;
+          if (ds['no-grpc-header']) y += `        no-grpc-header: true\n`;
+          if (ds['x-padding-bytes']) y += `        x-padding-bytes: ${q(ds['x-padding-bytes'])}\n`;
+          if (ds['reuse-settings'] && typeof ds['reuse-settings'] === 'object') {
+            y += `        reuse-settings:\n`;
+            for (const [k, v] of Object.entries(ds['reuse-settings']))
+              y += `          ${k}: ${v}\n`;
+          }
+        }
+      }
       break;
 
     case 'vmess':
