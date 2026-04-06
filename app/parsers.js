@@ -119,6 +119,7 @@ function buildVlessProxy({
     const host = Array.isArray(h2Host) ? h2Host : [h2Host || server];
     proxy['h2-opts'] = { path: h2Path || '/', host: host.filter(Boolean) };
   } else if (net === 'xhttp') {
+    if (xhttpMode && /^packet/i.test(xhttpMode)) proxy.xudp = true;
     proxy['xhttp-opts'] = {};
     if (xhttpPath) proxy['xhttp-opts'].path = xhttpPath;
     if (xhttpHost) proxy['xhttp-opts'].host = xhttpHost;

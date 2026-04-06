@@ -38,6 +38,7 @@ function proxyToYaml(p) {
         if (p['reality-opts']['public-key']) y += `      public-key: ${p['reality-opts']['public-key']}\n`;
         if (p['reality-opts']['short-id']) y += `      short-id: ${q(p['reality-opts']['short-id'])}\n`;
       }
+      if (p.xudp) y += `    xudp: true\n`;
       if (p['ws-opts']) {
         y += `    ws-opts:\n`;
         y += `      path: ${q(p['ws-opts'].path)}\n`;
