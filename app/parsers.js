@@ -2,30 +2,22 @@
 // Proxy Parsers (Step 2)
 // ============================================================
 function parseXHTTPExtra(extra, opts) {
-  const xmuxToReuse = (xmux) => {
-    const reuse = {};
-    const fields = [
-      ['maxConnections',   'max-connections'],
-      ['maxConcurrency',   'max-concurrency'],
-      ['cMaxReuseTimes',   'c-max-reuse-times'],
-      ['hMaxRequestTimes', 'h-max-request-times'],
-      ['hMaxReusableSecs', 'h-max-reusable-secs'],
-    ];
-    for (const [src, dst] of fields) {
-      const v = xmux[src];
-      if (typeof v === 'string' && v) reuse[dst] = v;
-      else if (typeof v === 'number') reuse[dst] = String(Math.trunc(v));
+  const toHeaderMap = (headers) => {
+    if (!headers || typeof headers !== 'object' || Array.isArray(headers)) return null;
+    const mapped = {};
+    for (const [key, value] of Object.entries(headers)) {
+      if (!key) continue;
+      if (typeof value === 'string' && value) mapped[key] = value;
+      else if (typeof value === 'number' || typeof value === 'boolean') mapped[key] = String(value);
     }
-    return reuse;
+    return Object.keys(mapped).length > 0 ? mapped : null;
   };
 
   if (extra.noGRPCHeader === true) opts['no-grpc-header'] = true;
   if (typeof extra.xPaddingBytes === 'string' && extra.xPaddingBytes)
     opts['x-padding-bytes'] = extra.xPaddingBytes;
-  if (extra.xmux && typeof extra.xmux === 'object') {
-    const reuse = xmuxToReuse(extra.xmux);
-    if (Object.keys(reuse).length > 0) opts['reuse-settings'] = reuse;
-  }
+  const headers = toHeaderMap(extra.headers);
+  if (headers) opts.headers = headers;
   if (extra.downloadSettings && typeof extra.downloadSettings === 'object') {
     const ds = extra.downloadSettings;
     const dsOpts = {};
@@ -36,6 +28,7 @@ function parseXHTTPExtra(extra, opts) {
       const tls = ds.tlsSettings;
       if (typeof tls.serverName === 'string' && tls.serverName) dsOpts['servername'] = tls.serverName;
       if (typeof tls.fingerprint === 'string' && tls.fingerprint) dsOpts['client-fingerprint'] = tls.fingerprint;
+      if (tls.allowInsecure === true) dsOpts['skip-cert-verify'] = true;
       if (Array.isArray(tls.alpn) && tls.alpn.length > 0)
         dsOpts['alpn'] = tls.alpn.filter(a => typeof a === 'string');
     }
@@ -43,12 +36,10 @@ function parseXHTTPExtra(extra, opts) {
       const xh = ds.xhttpSettings;
       if (typeof xh.path === 'string' && xh.path) dsOpts['path'] = xh.path;
       if (typeof xh.host === 'string' && xh.host) dsOpts['host'] = xh.host;
+      const downloadHeaders = toHeaderMap(xh.headers);
+      if (downloadHeaders) dsOpts.headers = downloadHeaders;
       if (xh.noGRPCHeader === true) dsOpts['no-grpc-header'] = true;
       if (typeof xh.xPaddingBytes === 'string' && xh.xPaddingBytes) dsOpts['x-padding-bytes'] = xh.xPaddingBytes;
-      if (xh.extra && typeof xh.extra === 'object' && xh.extra.xmux && typeof xh.extra.xmux === 'object') {
-        const reuse = xmuxToReuse(xh.extra.xmux);
-        if (Object.keys(reuse).length > 0) dsOpts['reuse-settings'] = reuse;
-      }
     }
     if (Object.keys(dsOpts).length > 0) opts['download-settings'] = dsOpts;
   }
@@ -73,6 +64,7 @@ function buildVlessProxy({
   grpcServiceName = '',
   h2Path = '/',
   h2Host = [],
+  packetEncoding = '',
   xhttpPath = '',
   xhttpHost = '',
   xhttpMode = '',
@@ -94,6 +86,16 @@ function buildVlessProxy({
   if (skipCertVerify) proxy['skip-cert-verify'] = true;
   const alpnList = (Array.isArray(alpn) ? alpn : [alpn]).map(v => String(v).trim()).filter(Boolean);
   if (alpnList.length) proxy.alpn = alpnList;
+  switch (String(packetEncoding || '').toLowerCase()) {
+    case 'none':
+      break;
+    case 'packet':
+      proxy['packet-addr'] = true;
+      break;
+    default:
+      proxy.xudp = true;
+      break;
+  }
 
   if (fingerprint) {
     proxy['client-fingerprint'] = fingerprint;
@@ -119,13 +121,15 @@ function buildVlessProxy({
     const host = Array.isArray(h2Host) ? h2Host : [h2Host || server];
     proxy['h2-opts'] = { path: h2Path || '/', host: host.filter(Boolean) };
   } else if (net === 'xhttp') {
-    if (xhttpMode && /^packet/i.test(xhttpMode)) proxy.xudp = true;
     proxy['xhttp-opts'] = {};
     if (xhttpPath) proxy['xhttp-opts'].path = xhttpPath;
     if (xhttpHost) proxy['xhttp-opts'].host = xhttpHost;
     if (xhttpMode) proxy['xhttp-opts'].mode = xhttpMode;
     if (xhttpExtra && typeof xhttpExtra === 'object') {
       parseXHTTPExtra(xhttpExtra, proxy['xhttp-opts']);
+    }
+    if (proxy['xhttp-opts'].mode === 'stream-one') {
+      delete proxy['xhttp-opts']['download-settings'];
     }
   }
 
@@ -192,6 +196,7 @@ function parseVless(rawUrl) {
     skipCertVerify: parseBoolish(p.get('allowInsecure')) || parseBoolish(p.get('insecure')),
     alpn: parseCsv(p.get('alpn')),
     fingerprint: p.get('fp') || '',
+    packetEncoding: p.get('packetEncoding') || '',
     realityPublicKey: p.get('pbk') || '',
     realityShortId: p.get('sid') || '',
     wsPath: p.get('path') || '/',
