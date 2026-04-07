@@ -57,6 +57,7 @@ function buildVlessProxy({
   skipCertVerify = false,
   alpn = [],
   fingerprint = '',
+  tlsFingerprint = '',
   realityPublicKey = '',
   realityShortId = '',
   wsPath = '/',
@@ -102,6 +103,7 @@ function buildVlessProxy({
   } else if (proxy.tls) {
     proxy['client-fingerprint'] = 'chrome';
   }
+  if (tlsFingerprint) proxy.fingerprint = tlsFingerprint;
 
   if (sec === 'reality') {
     proxy['reality-opts'] = {};
@@ -196,6 +198,7 @@ function parseVless(rawUrl) {
     skipCertVerify: parseBoolish(p.get('allowInsecure')) || parseBoolish(p.get('insecure')),
     alpn: parseCsv(p.get('alpn')),
     fingerprint: p.get('fp') || '',
+    tlsFingerprint: p.get('pcs') || '',
     packetEncoding: p.get('packetEncoding') || '',
     realityPublicKey: p.get('pbk') || '',
     realityShortId: p.get('sid') || '',

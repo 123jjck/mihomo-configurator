@@ -27,6 +27,7 @@ function proxyToYaml(p) {
       if (p.encryption) y += `    encryption: ${q(p.encryption)}\n`;
       if (p.servername) y += `    servername: ${q(p.servername)}\n`;
       if (p['client-fingerprint']) y += `    client-fingerprint: ${p['client-fingerprint']}\n`;
+      if (p.fingerprint) y += `    fingerprint: ${q(p.fingerprint)}\n`;
       if (p.flow) y += `    flow: ${p.flow}\n`;
       if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
       if (p.alpn && p.alpn.length) {
