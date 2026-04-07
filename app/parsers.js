@@ -1,6 +1,50 @@
 // ============================================================
 // Proxy Parsers (Step 2)
 // ============================================================
+function parseXHTTPExtra(extra, opts) {
+  const toHeaderMap = (headers) => {
+    if (!headers || typeof headers !== 'object' || Array.isArray(headers)) return null;
+    const mapped = {};
+    for (const [key, value] of Object.entries(headers)) {
+      if (!key) continue;
+      if (typeof value === 'string' && value) mapped[key] = value;
+      else if (typeof value === 'number' || typeof value === 'boolean') mapped[key] = String(value);
+    }
+    return Object.keys(mapped).length > 0 ? mapped : null;
+  };
+
+  if (extra.noGRPCHeader === true) opts['no-grpc-header'] = true;
+  if (typeof extra.xPaddingBytes === 'string' && extra.xPaddingBytes)
+    opts['x-padding-bytes'] = extra.xPaddingBytes;
+  const headers = toHeaderMap(extra.headers);
+  if (headers) opts.headers = headers;
+  if (extra.downloadSettings && typeof extra.downloadSettings === 'object') {
+    const ds = extra.downloadSettings;
+    const dsOpts = {};
+    if (typeof ds.address === 'string' && ds.address) dsOpts['server'] = ds.address;
+    if (typeof ds.port === 'number') dsOpts['port'] = Math.trunc(ds.port);
+    if (typeof ds.security === 'string' && ds.security.toLowerCase() === 'tls') dsOpts['tls'] = true;
+    if (ds.tlsSettings && typeof ds.tlsSettings === 'object') {
+      const tls = ds.tlsSettings;
+      if (typeof tls.serverName === 'string' && tls.serverName) dsOpts['servername'] = tls.serverName;
+      if (typeof tls.fingerprint === 'string' && tls.fingerprint) dsOpts['client-fingerprint'] = tls.fingerprint;
+      if (tls.allowInsecure === true) dsOpts['skip-cert-verify'] = true;
+      if (Array.isArray(tls.alpn) && tls.alpn.length > 0)
+        dsOpts['alpn'] = tls.alpn.filter(a => typeof a === 'string');
+    }
+    if (ds.xhttpSettings && typeof ds.xhttpSettings === 'object') {
+      const xh = ds.xhttpSettings;
+      if (typeof xh.path === 'string' && xh.path) dsOpts['path'] = xh.path;
+      if (typeof xh.host === 'string' && xh.host) dsOpts['host'] = xh.host;
+      const downloadHeaders = toHeaderMap(xh.headers);
+      if (downloadHeaders) dsOpts.headers = downloadHeaders;
+      if (xh.noGRPCHeader === true) dsOpts['no-grpc-header'] = true;
+      if (typeof xh.xPaddingBytes === 'string' && xh.xPaddingBytes) dsOpts['x-padding-bytes'] = xh.xPaddingBytes;
+    }
+    if (Object.keys(dsOpts).length > 0) opts['download-settings'] = dsOpts;
+  }
+}
+
 function buildVlessProxy({
   name,
   server,
@@ -13,20 +57,27 @@ function buildVlessProxy({
   skipCertVerify = false,
   alpn = [],
   fingerprint = '',
+  tlsFingerprint = '',
   realityPublicKey = '',
   realityShortId = '',
   wsPath = '/',
   wsHost = '',
   grpcServiceName = '',
   h2Path = '/',
-  h2Host = []
+  h2Host = [],
+  packetEncoding = '',
+  xhttpPath = '',
+  xhttpHost = '',
+  xhttpMode = '',
+  xhttpExtra = null
 }) {
   if (!name || !server || !Number.isFinite(+port) || !uuid) return null;
 
   const proxy = { name, type: 'vless', server, port: +port, uuid, udp: true };
   const rawNet = String(network || 'tcp').toLowerCase();
   const isHttpUpgrade = rawNet === 'httpupgrade' || rawNet === 'http-upgrade';
-  const net = isHttpUpgrade ? 'ws' : rawNet;
+  const isXhttp = rawNet === 'xhttp' || rawNet === 'splithttp';
+  const net = isHttpUpgrade ? 'ws' : isXhttp ? 'xhttp' : rawNet;
   proxy.network = net;
 
   const sec = security || '';
@@ -36,12 +87,23 @@ function buildVlessProxy({
   if (skipCertVerify) proxy['skip-cert-verify'] = true;
   const alpnList = (Array.isArray(alpn) ? alpn : [alpn]).map(v => String(v).trim()).filter(Boolean);
   if (alpnList.length) proxy.alpn = alpnList;
+  switch (String(packetEncoding || '').toLowerCase()) {
+    case 'none':
+      break;
+    case 'packet':
+      proxy['packet-addr'] = true;
+      break;
+    default:
+      proxy.xudp = true;
+      break;
+  }
 
   if (fingerprint) {
     proxy['client-fingerprint'] = fingerprint;
   } else if (proxy.tls) {
     proxy['client-fingerprint'] = 'chrome';
   }
+  if (tlsFingerprint) proxy.fingerprint = tlsFingerprint;
 
   if (sec === 'reality') {
     proxy['reality-opts'] = {};
@@ -60,6 +122,17 @@ function buildVlessProxy({
   } else if (net === 'h2' || net === 'http') {
     const host = Array.isArray(h2Host) ? h2Host : [h2Host || server];
     proxy['h2-opts'] = { path: h2Path || '/', host: host.filter(Boolean) };
+  } else if (net === 'xhttp') {
+    proxy['xhttp-opts'] = {};
+    if (xhttpPath) proxy['xhttp-opts'].path = xhttpPath;
+    if (xhttpHost) proxy['xhttp-opts'].host = xhttpHost;
+    if (xhttpMode) proxy['xhttp-opts'].mode = xhttpMode;
+    if (xhttpExtra && typeof xhttpExtra === 'object') {
+      parseXHTTPExtra(xhttpExtra, proxy['xhttp-opts']);
+    }
+    if (proxy['xhttp-opts'].mode === 'stream-one') {
+      delete proxy['xhttp-opts']['download-settings'];
+    }
   }
 
   return proxy;
@@ -125,13 +198,19 @@ function parseVless(rawUrl) {
     skipCertVerify: parseBoolish(p.get('allowInsecure')) || parseBoolish(p.get('insecure')),
     alpn: parseCsv(p.get('alpn')),
     fingerprint: p.get('fp') || '',
+    tlsFingerprint: p.get('pcs') || '',
+    packetEncoding: p.get('packetEncoding') || '',
     realityPublicKey: p.get('pbk') || '',
     realityShortId: p.get('sid') || '',
     wsPath: p.get('path') || '/',
     wsHost: p.get('host') || '',
     grpcServiceName: p.get('serviceName') || '',
     h2Path: p.get('path') || '/',
-    h2Host: [p.get('host') || server]
+    h2Host: [p.get('host') || server],
+    xhttpPath: p.get('path') || '',
+    xhttpHost: p.get('host') || '',
+    xhttpMode: p.get('mode') || '',
+    xhttpExtra: (() => { try { return JSON.parse(p.get('extra') || 'null'); } catch { return null; } })()
   });
   if (!proxy) return null;
   const encryption = p.get('encryption');

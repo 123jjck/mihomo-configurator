@@ -27,6 +27,7 @@ function proxyToYaml(p) {
       if (p.encryption) y += `    encryption: ${q(p.encryption)}\n`;
       if (p.servername) y += `    servername: ${q(p.servername)}\n`;
       if (p['client-fingerprint']) y += `    client-fingerprint: ${p['client-fingerprint']}\n`;
+      if (p.fingerprint) y += `    fingerprint: ${q(p.fingerprint)}\n`;
       if (p.flow) y += `    flow: ${p.flow}\n`;
       if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
       if (p.alpn && p.alpn.length) {
@@ -38,6 +39,8 @@ function proxyToYaml(p) {
         if (p['reality-opts']['public-key']) y += `      public-key: ${p['reality-opts']['public-key']}\n`;
         if (p['reality-opts']['short-id']) y += `      short-id: ${q(p['reality-opts']['short-id'])}\n`;
       }
+      if (p.xudp) y += `    xudp: true\n`;
+      if (p['packet-addr']) y += `    packet-addr: true\n`;
       if (p['ws-opts']) {
         y += `    ws-opts:\n`;
         y += `      path: ${q(p['ws-opts'].path)}\n`;
@@ -57,6 +60,43 @@ function proxyToYaml(p) {
         y += `      path: ${q(p['h2-opts'].path)}\n`;
         y += `      host:\n`;
         for (const h of p['h2-opts'].host) y += `        - ${q(h)}\n`;
+      }
+      if (p['xhttp-opts']) {
+        const xo = p['xhttp-opts'];
+        y += `    xhttp-opts:\n`;
+        if (xo.path) y += `      path: ${q(xo.path)}\n`;
+        if (xo.host) y += `      host: ${q(xo.host)}\n`;
+        if (xo.mode) y += `      mode: ${q(xo.mode)}\n`;
+        if (xo.headers && typeof xo.headers === 'object') {
+          y += `      headers:\n`;
+          for (const [k, v] of Object.entries(xo.headers))
+            y += `        ${k}: ${q(v)}\n`;
+        }
+        if (xo['no-grpc-header']) y += `      no-grpc-header: true\n`;
+        if (xo['x-padding-bytes']) y += `      x-padding-bytes: ${q(xo['x-padding-bytes'])}\n`;
+        if (xo.mode !== 'stream-one' && xo['download-settings'] && typeof xo['download-settings'] === 'object') {
+          const ds = xo['download-settings'];
+          y += `      download-settings:\n`;
+          if (ds.server) y += `        server: ${q(ds.server)}\n`;
+          if (ds.port != null) y += `        port: ${ds.port}\n`;
+          if (ds.tls) y += `        tls: true\n`;
+          if (ds.servername) y += `        servername: ${q(ds.servername)}\n`;
+          if (ds['client-fingerprint']) y += `        client-fingerprint: ${q(ds['client-fingerprint'])}\n`;
+          if (ds['skip-cert-verify']) y += `        skip-cert-verify: true\n`;
+          if (Array.isArray(ds.alpn) && ds.alpn.length) {
+            y += `        alpn:\n`;
+            for (const a of ds.alpn) y += `          - ${q(a)}\n`;
+          }
+          if (ds.path) y += `        path: ${q(ds.path)}\n`;
+          if (ds.host) y += `        host: ${q(ds.host)}\n`;
+          if (ds.headers && typeof ds.headers === 'object') {
+            y += `        headers:\n`;
+            for (const [k, v] of Object.entries(ds.headers))
+              y += `          ${k}: ${q(v)}\n`;
+          }
+          if (ds['no-grpc-header']) y += `        no-grpc-header: true\n`;
+          if (ds['x-padding-bytes']) y += `        x-padding-bytes: ${q(ds['x-padding-bytes'])}\n`;
+        }
       }
       break;
 
