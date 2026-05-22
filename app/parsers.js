@@ -5,16 +5,19 @@ function parseXHTTPExtra(extra, opts) {
   const xmuxToReuse = (xmux) => {
     if (!xmux || typeof xmux !== 'object' || Array.isArray(xmux)) return null;
     const reuse = {};
-    const mapField = (src, dst) => {
+    const mapStr = (src, dst) => {
       const value = xmux[src];
       if (typeof value === 'string' && value) reuse[dst] = value;
       else if (typeof value === 'number' && Number.isFinite(value)) reuse[dst] = String(Math.trunc(value));
     };
-    mapField('maxConnections', 'max-connections');
-    mapField('maxConcurrency', 'max-concurrency');
-    mapField('cMaxReuseTimes', 'c-max-reuse-times');
-    mapField('hMaxRequestTimes', 'h-max-request-times');
-    mapField('hMaxReusableSecs', 'h-max-reusable-secs');
+    mapStr('maxConnections', 'max-connections');
+    mapStr('maxConcurrency', 'max-concurrency');
+    mapStr('cMaxReuseTimes', 'c-max-reuse-times');
+    mapStr('hMaxRequestTimes', 'h-max-request-times');
+    mapStr('hMaxReusableSecs', 'h-max-reusable-secs');
+    // hKeepAlivePeriod is a number in Go, stored as int
+    if (typeof xmux['hKeepAlivePeriod'] === 'number' && Number.isFinite(xmux['hKeepAlivePeriod']))
+      reuse['h-keep-alive-period'] = Math.trunc(xmux['hKeepAlivePeriod']);
     return Object.keys(reuse).length > 0 ? reuse : null;
   };
   const toHeaderMap = (headers) => {
@@ -27,36 +30,68 @@ function parseXHTTPExtra(extra, opts) {
     }
     return Object.keys(mapped).length > 0 ? mapped : null;
   };
+  const setStr = (src, dst) => {
+    if (typeof extra[src] === 'string' && extra[src]) opts[dst] = extra[src];
+  };
+  const setNum = (src, dst) => {
+    if (typeof extra[src] === 'number' && Number.isFinite(extra[src])) opts[dst] = Math.trunc(extra[src]);
+  };
 
   if (extra.noGRPCHeader === true) opts['no-grpc-header'] = true;
-  if (typeof extra.xPaddingBytes === 'string' && extra.xPaddingBytes)
-    opts['x-padding-bytes'] = extra.xPaddingBytes;
+  setStr('xPaddingBytes', 'x-padding-bytes');
+  if (typeof extra.xPaddingObfsMode === 'boolean') opts['x-padding-obfs-mode'] = extra.xPaddingObfsMode;
+  setStr('xPaddingKey', 'x-padding-key');
+  setStr('xPaddingHeader', 'x-padding-header');
+  setStr('xPaddingPlacement', 'x-padding-placement');
+  setStr('xPaddingMethod', 'x-padding-method');
+  setStr('uplinkHttpMethod', 'uplink-http-method');
+  setStr('sessionPlacement', 'session-placement');
+  setStr('sessionKey', 'session-key');
+  setStr('seqPlacement', 'seq-placement');
+  setStr('seqKey', 'seq-key');
+  setStr('uplinkDataPlacement', 'uplink-data-placement');
+  setStr('uplinkDataKey', 'uplink-data-key');
+  setNum('uplinkChunkSize', 'uplink-chunk-size');
+  setNum('scMaxEachPostBytes', 'sc-max-each-post-bytes');
+  setNum('scMinPostsIntervalMs', 'sc-min-posts-interval-ms');
+
   const rootReuse = xmuxToReuse(extra.xmux);
   if (rootReuse) opts['reuse-settings'] = rootReuse;
   const headers = toHeaderMap(extra.headers);
   if (headers) opts.headers = headers;
+
   if (extra.downloadSettings && typeof extra.downloadSettings === 'object') {
     const ds = extra.downloadSettings;
     const dsOpts = {};
     if (typeof ds.address === 'string' && ds.address) dsOpts['server'] = ds.address;
     if (typeof ds.port === 'number') dsOpts['port'] = Math.trunc(ds.port);
-    if (typeof ds.security === 'string' && ds.security.toLowerCase() === 'tls') dsOpts['tls'] = true;
-    if (ds.tlsSettings && typeof ds.tlsSettings === 'object') {
-      const tls = ds.tlsSettings;
-      if (typeof tls.serverName === 'string' && tls.serverName) dsOpts['servername'] = tls.serverName;
-      if (typeof tls.fingerprint === 'string' && tls.fingerprint) dsOpts['client-fingerprint'] = tls.fingerprint;
-      if (tls.allowInsecure === true) dsOpts['skip-cert-verify'] = true;
-      if (Array.isArray(tls.alpn) && tls.alpn.length > 0)
-        dsOpts['alpn'] = tls.alpn.filter(a => typeof a === 'string');
+    const sec = typeof ds.security === 'string' ? ds.security.toLowerCase() : '';
+    if (sec === 'tls' || sec === 'reality') {
+      dsOpts['tls'] = true;
+      if (ds.tlsSettings && typeof ds.tlsSettings === 'object') {
+        const tls = ds.tlsSettings;
+        if (typeof tls.serverName === 'string' && tls.serverName) dsOpts['servername'] = tls.serverName;
+        if (typeof tls.fingerprint === 'string' && tls.fingerprint) dsOpts['client-fingerprint'] = tls.fingerprint;
+        if (tls.allowInsecure === true) dsOpts['skip-cert-verify'] = true;
+        if (Array.isArray(tls.alpn) && tls.alpn.length > 0)
+          dsOpts['alpn'] = tls.alpn.filter(a => typeof a === 'string');
+      }
+      if (sec === 'reality' && ds.realitySettings && typeof ds.realitySettings === 'object') {
+        const r = ds.realitySettings;
+        const realityOpts = {};
+        if (typeof r.publicKey === 'string' && r.publicKey) realityOpts['public-key'] = r.publicKey;
+        if (typeof r.shortId === 'string' && r.shortId) realityOpts['short-id'] = r.shortId;
+        if (Object.keys(realityOpts).length > 0) dsOpts['reality-opts'] = realityOpts;
+      }
     }
     if (ds.xhttpSettings && typeof ds.xhttpSettings === 'object') {
       const xh = ds.xhttpSettings;
       if (typeof xh.path === 'string' && xh.path) dsOpts['path'] = xh.path;
       if (typeof xh.host === 'string' && xh.host) dsOpts['host'] = xh.host;
-      const downloadHeaders = toHeaderMap(xh.headers);
-      if (downloadHeaders) dsOpts.headers = downloadHeaders;
-      if (xh.noGRPCHeader === true) dsOpts['no-grpc-header'] = true;
-      if (typeof xh.xPaddingBytes === 'string' && xh.xPaddingBytes) dsOpts['x-padding-bytes'] = xh.xPaddingBytes;
+      if (xh.headers && typeof xh.headers === 'object' && !Array.isArray(xh.headers)) {
+        const dsHeaders = toHeaderMap(xh.headers);
+        if (dsHeaders) dsOpts.headers = dsHeaders;
+      }
       const nestedReuse = xmuxToReuse(xh.extra?.xmux);
       if (nestedReuse) dsOpts['reuse-settings'] = nestedReuse;
     }
@@ -503,10 +538,13 @@ function parseSS(rawUrl) {
         host: pluginInfo.get('obfs-host') || ''
       };
     } else if (pluginName.includes('v2ray-plugin')) {
+      // fall back to obfs/obfs-host params (some share link generators use them)
+      const mode = pluginInfo.get('mode') || pluginInfo.get('obfs') || '';
+      const host = pluginInfo.get('host') || pluginInfo.get('obfs-host') || '';
       proxy.plugin = 'v2ray-plugin';
       proxy['plugin-opts'] = {
-        mode: pluginInfo.get('mode') || '',
-        host: pluginInfo.get('host') || '',
+        mode,
+        host,
         path: pluginInfo.get('path') || '',
         tls: /(?:^|;)tls(?:;|$)/.test(plugin)
       };
@@ -1002,6 +1040,212 @@ function parseWireGuardConfig(text) {
   return proxy;
 }
 
+// ============================================================
+// Hysteria v1
+// ============================================================
+function parseHysteria(rawUrl) {
+  const u = parseUrlOrNull(rawUrl);
+  if (!u || u.protocol !== 'hysteria:') return null;
+  const server = u.hostname;
+  const port = Number(u.port);
+  if (!server || !Number.isFinite(port)) return null;
+
+  const p = u.searchParams;
+  const proxy = {
+    name: u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `hysteria-${server}`,
+    type: 'hysteria',
+    server,
+    port
+  };
+  const peer = p.get('peer');
+  if (peer) proxy.sni = peer;
+  const obfs = p.get('obfs');
+  if (obfs) proxy.obfs = obfs;
+  const alpn = parseCsv(p.get('alpn'));
+  if (alpn.length) proxy.alpn = alpn;
+  const auth = p.get('auth');
+  if (auth) proxy.auth_str = auth;
+  const protocol = p.get('protocol');
+  if (protocol) proxy.protocol = protocol;
+  const up = p.get('up') || p.get('upmbps');
+  const down = p.get('down') || p.get('downmbps');
+  if (up) proxy.up = up;
+  if (down) proxy.down = down;
+  if (parseBoolish(p.get('insecure'))) proxy['skip-cert-verify'] = true;
+  return proxy;
+}
+
+// ============================================================
+// SSR (ShadowsocksR)
+// ============================================================
+function parseSsr(rawUrl) {
+  const b64 = rawUrl.replace(/^ssr:\/\//i, '');
+  const decoded = decodeBase64Compat(b64);
+  if (!decoded) return null;
+
+  const qmark = decoded.indexOf('/?');
+  const before = qmark >= 0 ? decoded.slice(0, qmark) : decoded;
+  const after  = qmark >= 0 ? decoded.slice(qmark + 2) : '';
+
+  // ssr://host:port:protocol:method:obfs:base64pass
+  const parts = before.split(':');
+  if (parts.length < 6) return null;
+  const host     = parts[0];
+  const port     = parts[1];
+  const protocol = parts[2];
+  const method   = parts[3];
+  const obfs     = parts[4];
+  // password may contain colons after base64 decoding, join remaining
+  const pwdB64   = parts.slice(5).join(':');
+  const password = decodeBase64Compat(pwdB64) || pwdB64;
+
+  if (!host || !port || !password) return null;
+
+  let remarks = '', obfsParam = '', protocolParam = '';
+  if (after) {
+    // Query values are URL-safe base64 (no padding); use decodeBase64Compat
+    const params = new URLSearchParams(after);
+    const rb64 = params.get('remarks');
+    if (rb64) remarks = decodeBase64Compat(rb64) || '';
+    const ob64 = params.get('obfsparam');
+    if (ob64) obfsParam = decodeBase64Compat(ob64) || '';
+    const pb64 = params.get('protoparam');
+    if (pb64) protocolParam = decodeBase64Compat(pb64) || '';
+  }
+
+  const proxy = {
+    name: remarks || `ssr-${host}`,
+    type: 'ssr',
+    server: host,
+    port: +port,
+    cipher: method,
+    password,
+    obfs,
+    protocol,
+    udp: true
+  };
+  if (obfsParam) proxy['obfs-param'] = obfsParam;
+  if (protocolParam) proxy['protocol-param'] = protocolParam;
+  return proxy;
+}
+
+// ============================================================
+// SOCKS5 / HTTP(S) plain proxies
+// ============================================================
+function parseSocksHttp(rawUrl) {
+  const u = parseUrlOrNull(rawUrl);
+  if (!u) return null;
+  const scheme = u.protocol.replace(':', '').toLowerCase();
+  if (!['socks', 'socks5', 'socks5h', 'http', 'https'].includes(scheme)) return null;
+  const server  = u.hostname;
+  const portStr = u.port;
+  if (!server || !portStr) return null;
+
+  const name = u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `${server}:${portStr}`;
+
+  // Credentials may be plain or base64-encoded (concat as "user:pass" then try decode)
+  const rawCred = u.username
+    ? (u.password ? `${u.username}:${u.password}` : u.username)
+    : '';
+  let username = decodeURIComponentSafe(u.username);
+  let password = decodeURIComponentSafe(u.password);
+  if (rawCred && !u.password) {
+    const decoded = decodeBase64Compat(rawCred);
+    if (decoded) {
+      const idx = decoded.indexOf(':');
+      if (idx >= 0) { username = decoded.slice(0, idx); password = decoded.slice(idx + 1); }
+      else { username = decoded; }
+    }
+  }
+
+  const type = ['socks', 'socks5', 'socks5h'].includes(scheme) ? 'socks5' : 'http';
+  const proxy = {
+    name,
+    type,
+    server,
+    port: +portStr,
+    username,
+    password,
+    'skip-cert-verify': true
+  };
+  if (scheme === 'https') proxy.tls = true;
+  return proxy;
+}
+
+// ============================================================
+// AnyTLS
+// https://github.com/anytls/anytls-go/blob/main/docs/uri_scheme.md
+// ============================================================
+function parseAnyTls(rawUrl) {
+  const u = parseUrlOrNull(rawUrl);
+  if (!u || u.protocol !== 'anytls:') return null;
+  const server  = u.hostname;
+  const portStr = u.port;
+  if (!server || !portStr) return null;
+
+  const username = decodeURIComponentSafe(u.username);
+  const password = decodeURIComponentSafe(u.password) || username;
+  const p = u.searchParams;
+  const name = u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `${server}:${portStr}`;
+  return {
+    name,
+    type: 'anytls',
+    server,
+    port: +portStr,
+    username,
+    password,
+    sni: p.get('sni') || '',
+    fingerprint: p.get('hpkp') || '',
+    'skip-cert-verify': p.get('insecure') === '1',
+    udp: true
+  };
+}
+
+// ============================================================
+// Mieru
+// ============================================================
+function parseMieru(rawUrl) {
+  const u = parseUrlOrNull(rawUrl);
+  if (!u || u.protocol !== 'mierus:') return null;
+  const server = u.hostname;
+  if (!server) return null;
+
+  const username = decodeURIComponentSafe(u.username);
+  const password = decodeURIComponentSafe(u.password);
+  const p = u.searchParams;
+  const portList     = p.getAll('port');
+  const protocolList = p.getAll('protocol');
+  if (!portList.length || portList.length !== protocolList.length) return null;
+
+  // Take first port/protocol pair (same as first iteration in Go)
+  const port     = portList[0];
+  const protocol = protocolList[0];
+  const baseName = u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : (p.get('profile') || server);
+  const name = `${baseName}:${port}/${protocol}`;
+
+  const proxy = {
+    name,
+    type: 'mieru',
+    server,
+    transport: protocol,
+    udp: true,
+    username,
+    password
+  };
+  if (port.includes('-')) {
+    proxy['port-range'] = port;
+  } else {
+    proxy.port = +port;
+  }
+  const multiplexing = p.get('multiplexing');
+  if (multiplexing) proxy.multiplexing = multiplexing;
+  const handshakeMode = p.get('handshake-mode');
+  if (handshakeMode) proxy['handshake-mode'] = handshakeMode;
+  const trafficPattern = p.get('traffic-pattern');
+  if (trafficPattern) proxy['traffic-pattern'] = trafficPattern;
+  return proxy;
+}
+
 async function parseProxyUrl(line) {
   line = line.trim();
   if (!line) return null;
@@ -1010,9 +1254,14 @@ async function parseProxyUrl(line) {
   if (lower.startsWith('vless://')) return parseVless(line);
   if (lower.startsWith('vmess://')) return parseVmess(line);
   if (lower.startsWith('ss://')) return parseSS(line);
+  if (lower.startsWith('ssr://')) return parseSsr(line);
   if (lower.startsWith('trojan://')) return parseTrojan(line);
   if (lower.startsWith('hysteria2://') || lower.startsWith('hy2://')) return parseHysteria2(line);
+  if (lower.startsWith('hysteria://')) return parseHysteria(line);
   if (lower.startsWith('tuic://')) return parseTuic(line);
+  if (lower.startsWith('anytls://')) return parseAnyTls(line);
+  if (lower.startsWith('mierus://')) return parseMieru(line);
+  if (/^(?:socks5?h?|https?):\/\//i.test(line)) return parseSocksHttp(line);
   return null;
 }
 

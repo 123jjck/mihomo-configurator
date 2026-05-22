@@ -74,6 +74,26 @@ function proxyToYaml(p) {
         }
         if (xo['no-grpc-header']) y += `      no-grpc-header: true\n`;
         if (xo['x-padding-bytes']) y += `      x-padding-bytes: ${q(xo['x-padding-bytes'])}\n`;
+        if (typeof xo['x-padding-obfs-mode'] === 'boolean') y += `      x-padding-obfs-mode: ${xo['x-padding-obfs-mode']}\n`;
+        if (xo['x-padding-key']) y += `      x-padding-key: ${q(xo['x-padding-key'])}\n`;
+        if (xo['x-padding-header']) y += `      x-padding-header: ${q(xo['x-padding-header'])}\n`;
+        if (xo['x-padding-placement']) y += `      x-padding-placement: ${q(xo['x-padding-placement'])}\n`;
+        if (xo['x-padding-method']) y += `      x-padding-method: ${q(xo['x-padding-method'])}\n`;
+        if (xo['uplink-http-method']) y += `      uplink-http-method: ${q(xo['uplink-http-method'])}\n`;
+        if (xo['session-placement']) y += `      session-placement: ${q(xo['session-placement'])}\n`;
+        if (xo['session-key']) y += `      session-key: ${q(xo['session-key'])}\n`;
+        if (xo['seq-placement']) y += `      seq-placement: ${q(xo['seq-placement'])}\n`;
+        if (xo['seq-key']) y += `      seq-key: ${q(xo['seq-key'])}\n`;
+        if (xo['uplink-data-placement']) y += `      uplink-data-placement: ${q(xo['uplink-data-placement'])}\n`;
+        if (xo['uplink-data-key']) y += `      uplink-data-key: ${q(xo['uplink-data-key'])}\n`;
+        if (xo['uplink-chunk-size'] != null) y += `      uplink-chunk-size: ${xo['uplink-chunk-size']}\n`;
+        if (xo['sc-max-each-post-bytes'] != null) y += `      sc-max-each-post-bytes: ${xo['sc-max-each-post-bytes']}\n`;
+        if (xo['sc-min-posts-interval-ms'] != null) y += `      sc-min-posts-interval-ms: ${xo['sc-min-posts-interval-ms']}\n`;
+        if (xo['reuse-settings'] && typeof xo['reuse-settings'] === 'object') {
+          y += `      reuse-settings:\n`;
+          for (const [k, v] of Object.entries(xo['reuse-settings']))
+            y += `        ${k}: ${q(String(v))}\n`;
+        }
         if (xo.mode !== 'stream-one' && xo['download-settings'] && typeof xo['download-settings'] === 'object') {
           const ds = xo['download-settings'];
           y += `      download-settings:\n`;
@@ -87,6 +107,11 @@ function proxyToYaml(p) {
             y += `        alpn:\n`;
             for (const a of ds.alpn) y += `          - ${q(a)}\n`;
           }
+          if (ds['reality-opts'] && typeof ds['reality-opts'] === 'object') {
+            y += `        reality-opts:\n`;
+            if (ds['reality-opts']['public-key']) y += `          public-key: ${ds['reality-opts']['public-key']}\n`;
+            if (ds['reality-opts']['short-id']) y += `          short-id: ${q(ds['reality-opts']['short-id'])}\n`;
+          }
           if (ds.path) y += `        path: ${q(ds.path)}\n`;
           if (ds.host) y += `        host: ${q(ds.host)}\n`;
           if (ds.headers && typeof ds.headers === 'object') {
@@ -94,8 +119,11 @@ function proxyToYaml(p) {
             for (const [k, v] of Object.entries(ds.headers))
               y += `          ${k}: ${q(v)}\n`;
           }
-          if (ds['no-grpc-header']) y += `        no-grpc-header: true\n`;
-          if (ds['x-padding-bytes']) y += `        x-padding-bytes: ${q(ds['x-padding-bytes'])}\n`;
+          if (ds['reuse-settings'] && typeof ds['reuse-settings'] === 'object') {
+            y += `        reuse-settings:\n`;
+            for (const [k, v] of Object.entries(ds['reuse-settings']))
+              y += `          ${k}: ${q(String(v))}\n`;
+          }
         }
       }
       break;
@@ -248,7 +276,7 @@ function proxyToYaml(p) {
       y += `    public-key: ${p['public-key']}\n`;
       y += `    udp: true\n`;
       if (p.mtu) y += `    mtu: ${p.mtu}\n`;
-      if (p['pre-shared-key']) y += `    pre-shared-key: ${p['pre-shared-key']}\n`;
+      if (p['pre-shared-key']) y += `    pre-shared-key: ${q(p['pre-shared-key'])}\n`;
       if (p.dns) {
         y += `    dns:\n`;
         for (const d of p.dns) y += `      - ${d}\n`;
@@ -263,6 +291,64 @@ function proxyToYaml(p) {
           }
         }
       }
+      break;
+
+    case 'hysteria':
+      if (p.auth_str) y += `    auth_str: ${q(p.auth_str)}\n`;
+      if (p.obfs) y += `    obfs: ${q(p.obfs)}\n`;
+      if (p.sni) y += `    sni: ${q(p.sni)}\n`;
+      if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
+      if (p.alpn && p.alpn.length) {
+        y += `    alpn:\n`;
+        for (const a of p.alpn) y += `      - ${q(a)}\n`;
+      }
+      if (p.protocol) y += `    protocol: ${q(p.protocol)}\n`;
+      if (p.up) y += `    up: ${q(p.up)}\n`;
+      if (p.down) y += `    down: ${q(p.down)}\n`;
+      break;
+
+    case 'ssr':
+      y += `    cipher: ${p.cipher}\n`;
+      y += `    password: ${q(p.password)}\n`;
+      y += `    obfs: ${q(p.obfs)}\n`;
+      y += `    protocol: ${q(p.protocol)}\n`;
+      y += `    udp: true\n`;
+      if (p['obfs-param']) y += `    obfs-param: ${q(p['obfs-param'])}\n`;
+      if (p['protocol-param']) y += `    protocol-param: ${q(p['protocol-param'])}\n`;
+      break;
+
+    case 'socks5':
+      if (p.username) y += `    username: ${q(p.username)}\n`;
+      if (p.password) y += `    password: ${q(p.password)}\n`;
+      if (p.tls) y += `    tls: true\n`;
+      if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
+      break;
+
+    case 'http':
+      if (p.username) y += `    username: ${q(p.username)}\n`;
+      if (p.password) y += `    password: ${q(p.password)}\n`;
+      if (p.tls) y += `    tls: true\n`;
+      if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
+      break;
+
+    case 'anytls':
+      y += `    username: ${q(p.username)}\n`;
+      y += `    password: ${q(p.password)}\n`;
+      if (p.sni) y += `    sni: ${q(p.sni)}\n`;
+      if (p.fingerprint) y += `    fingerprint: ${q(p.fingerprint)}\n`;
+      if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
+      if (p.udp) y += `    udp: true\n`;
+      break;
+
+    case 'mieru':
+      y += `    transport: ${q(p.transport)}\n`;
+      if (p['port-range']) y += `    port-range: ${q(p['port-range'])}\n`;
+      y += `    username: ${q(p.username)}\n`;
+      y += `    password: ${q(p.password)}\n`;
+      if (p.multiplexing) y += `    multiplexing: ${q(p.multiplexing)}\n`;
+      if (p['handshake-mode']) y += `    handshake-mode: ${q(p['handshake-mode'])}\n`;
+      if (p['traffic-pattern']) y += `    traffic-pattern: ${q(p['traffic-pattern'])}\n`;
+      if (p.udp) y += `    udp: true\n`;
       break;
   }
   return y;
