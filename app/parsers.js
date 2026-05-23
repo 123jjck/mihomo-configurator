@@ -731,7 +731,15 @@ function normalizeAwgValue(v) {
 }
 
 function getAwgKey(obj, k) {
-  return obj?.[k] ?? obj?.[k.toUpperCase()] ?? obj?.[k.toLowerCase()];
+  if (!obj) return undefined;
+  // Fast path: exact match
+  if (k in obj) return obj[k];
+  // Case-insensitive search — handles variants like PresharedKey / PreSharedKey / PRESHAREDKEY
+  const lower = k.toLowerCase();
+  for (const key of Object.keys(obj)) {
+    if (key.toLowerCase() === lower) return obj[key];
+  }
+  return undefined;
 }
 
 function hasAwgKey(obj, k) {
@@ -1130,13 +1138,15 @@ function parseSsr(rawUrl) {
 }
 
 // ============================================================
-// SOCKS5 / HTTP(S) plain proxies
+// SOCKS5 plain proxies (socks:// socks5:// socks5h://)
+// NOTE: http:// and https:// are intentionally excluded here —
+// those URLs are treated as subscription links by the configurator.
 // ============================================================
-function parseSocksHttp(rawUrl) {
+function parseSocks(rawUrl) {
   const u = parseUrlOrNull(rawUrl);
   if (!u) return null;
   const scheme = u.protocol.replace(':', '').toLowerCase();
-  if (!['socks', 'socks5', 'socks5h', 'http', 'https'].includes(scheme)) return null;
+  if (!['socks', 'socks5', 'socks5h'].includes(scheme)) return null;
   const server  = u.hostname;
   const portStr = u.port;
   if (!server || !portStr) return null;
@@ -1144,13 +1154,10 @@ function parseSocksHttp(rawUrl) {
   const name = u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `${server}:${portStr}`;
 
   // Credentials may be plain or base64-encoded (concat as "user:pass" then try decode)
-  const rawCred = u.username
-    ? (u.password ? `${u.username}:${u.password}` : u.username)
-    : '';
   let username = decodeURIComponentSafe(u.username);
   let password = decodeURIComponentSafe(u.password);
-  if (rawCred && !u.password) {
-    const decoded = decodeBase64Compat(rawCred);
+  if (u.username && !u.password) {
+    const decoded = decodeBase64Compat(u.username);
     if (decoded) {
       const idx = decoded.indexOf(':');
       if (idx >= 0) { username = decoded.slice(0, idx); password = decoded.slice(idx + 1); }
@@ -1158,18 +1165,15 @@ function parseSocksHttp(rawUrl) {
     }
   }
 
-  const type = ['socks', 'socks5', 'socks5h'].includes(scheme) ? 'socks5' : 'http';
-  const proxy = {
+  return {
     name,
-    type,
+    type: 'socks5',
     server,
     port: +portStr,
     username,
     password,
     'skip-cert-verify': true
   };
-  if (scheme === 'https') proxy.tls = true;
-  return proxy;
 }
 
 // ============================================================
@@ -1261,7 +1265,7 @@ async function parseProxyUrl(line) {
   if (lower.startsWith('tuic://')) return parseTuic(line);
   if (lower.startsWith('anytls://')) return parseAnyTls(line);
   if (lower.startsWith('mierus://')) return parseMieru(line);
-  if (/^(?:socks5?h?|https?):\/\//i.test(line)) return parseSocksHttp(line);
+  if (/^socks5?h?:\/\//i.test(line)) return parseSocks(line);
   return null;
 }
 
