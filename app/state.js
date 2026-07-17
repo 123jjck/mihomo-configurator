@@ -15,7 +15,7 @@ const state = {
   activeOtherPresets: new Set(),
   activeCdnProviders: new Set(),
   matchTarget: 'DIRECT',
-  device: 'pc',
+  device: 'desktop',
   lang: 'ru',
   importedRawConfig: null
 };
@@ -77,6 +77,13 @@ const I18N = {
     subEditLabel: 'Подписка:',
     subFilterLabel: 'Добавить сервера со словами в названии:',
     subExcludeLabel: 'Исключить сервера со словами в названии:',
+    proxyModalTitle: 'Параметры сервера',
+    proxyEditLabel: 'Сервер:',
+    dialerProxyLabel: 'Подключаться через другой сервер',
+    dialerProxyHint: 'Выбранный сервер будет использоваться для подключения к этому серверу.',
+    dialerProxyNone: 'Не использовать',
+    dialerProxyVia: 'Через: {name}',
+    dialerProxyCycle: 'Нельзя создать циклическую цепочку серверов.',
     cancelBtn: 'Отмена',
     saveBtn: 'Сохранить',
     errAddDnsBoth: 'Добавьте DNS-серверы, чтобы продолжить.',
@@ -99,6 +106,7 @@ const I18N = {
     proxyAddedToast: 'Добавлен {type} сервер: {name}',
     proxyFileParseFailed: 'Не удалось распознать файл конфигурации',
     subUpdatedToast: 'Параметры подписки обновлены: {name}',
+    proxyUpdatedToast: 'Параметры сервера обновлены: {name}',
     copySuccess: 'Скопировано в буфер обмена',
     copyFail: 'Не удалось скопировать',
     downloadSuccess: 'Файл config.yaml скачан',
@@ -106,8 +114,12 @@ const I18N = {
     presetDirectRu: 'RU трафик напрямую',
     presetRuBlocked: 'Заблокированные сайты',
     presetAllCdn: 'Все CDN',
-    devicePcLabel: 'PC / Android / iOS',
-    devicePcHintHtml: 'Клиент: <a href="https://github.com/pluralplay/FlClashX/releases" target="_blank" style="color:#267cff">FlClashX</a> (Windows / macOS / Linux / Android) · iOS: <a href="https://apps.apple.com/us/app/clash-mi/id6744321968" target="_blank" style="color:#267cff">Clash Mi</a>',
+    deviceDesktopLabel: 'Windows / macOS / Linux',
+    deviceDesktopHintHtml: 'Клиент: <a href="https://github.com/pluralplay/FlClashX/releases" target="_blank" style="color:#267cff">FlClashX</a>',
+    deviceAndroidLabel: 'Android',
+    deviceAndroidHintHtml: 'Клиент: <a href="https://github.com/pluralplay/FlClashX/releases" target="_blank" style="color:#267cff">FlClashX</a>',
+    deviceIosLabel: 'iOS',
+    deviceIosHintHtml: 'Клиент: <a href="https://apps.apple.com/us/app/clash-mi/id6744321968" target="_blank" style="color:#267cff">Clash Mi</a>',
     deviceRouterLabel: 'Роутер (OpenWRT)',
     deviceRouterHintHtml: 'Клиент: <a href="https://ssclash.notion.site/SSClash-OpenWrt-15989188f6b4804b8e4bcc15ef00b890" target="_blank" style="color:#267cff">SSClash</a>',
     importBtn: 'Импортировать конфиг',
@@ -170,6 +182,13 @@ const I18N = {
     subEditLabel: 'Subscription:',
     subFilterLabel: 'Include servers containing words in name:',
     subExcludeLabel: 'Exclude servers containing words in name:',
+    proxyModalTitle: 'Server Settings',
+    proxyEditLabel: 'Server:',
+    dialerProxyLabel: 'Connect through another server',
+    dialerProxyHint: 'The selected server will be used to establish a connection to this server.',
+    dialerProxyNone: 'Do not use',
+    dialerProxyVia: 'Via: {name}',
+    dialerProxyCycle: 'A circular server chain cannot be created.',
     cancelBtn: 'Cancel',
     saveBtn: 'Save',
     errAddDnsBoth: 'Add DNS servers to continue.',
@@ -192,6 +211,7 @@ const I18N = {
     proxyAddedToast: '{type} server added: {name}',
     proxyFileParseFailed: 'Failed to parse configuration file',
     subUpdatedToast: 'Subscription parameters updated: {name}',
+    proxyUpdatedToast: 'Server parameters updated: {name}',
     copySuccess: 'Copied to clipboard',
     copyFail: 'Failed to copy',
     downloadSuccess: 'config.yaml downloaded',
@@ -199,8 +219,12 @@ const I18N = {
     presetDirectRu: 'RU traffic direct',
     presetRuBlocked: 'Blocked sites',
     presetAllCdn: 'All CDNs',
-    devicePcLabel: 'PC / Android / iOS',
-    devicePcHintHtml: 'Client: <a href="https://github.com/pluralplay/FlClashX/releases" target="_blank" style="color:#267cff">FlClashX</a> (Windows / macOS / Linux / Android) · iOS: <a href="https://apps.apple.com/us/app/clash-mi/id6744321968" target="_blank" style="color:#267cff">Clash Mi</a>',
+    deviceDesktopLabel: 'Windows / macOS / Linux',
+    deviceDesktopHintHtml: 'Client: <a href="https://github.com/pluralplay/FlClashX/releases" target="_blank" style="color:#267cff">FlClashX</a>',
+    deviceAndroidLabel: 'Android',
+    deviceAndroidHintHtml: 'Client: <a href="https://github.com/pluralplay/FlClashX/releases" target="_blank" style="color:#267cff">FlClashX</a>',
+    deviceIosLabel: 'iOS',
+    deviceIosHintHtml: 'Client: <a href="https://apps.apple.com/us/app/clash-mi/id6744321968" target="_blank" style="color:#267cff">Clash Mi</a>',
     deviceRouterLabel: 'Router (OpenWRT)',
     deviceRouterHintHtml: 'Client: <a href="https://ssclash.notion.site/SSClash-OpenWrt-15989188f6b4804b8e4bcc15ef00b890" target="_blank" style="color:#267cff">SSClash</a>',
     importBtn: 'Import config',
@@ -304,6 +328,12 @@ function localizeStaticUI() {
   setText('sub-exclude-label', 'subExcludeLabel');
   setText('sub-cancel-btn', 'cancelBtn');
   setText('sub-save-btn', 'saveBtn');
+  setText('proxy-modal-title', 'proxyModalTitle');
+  setText('proxy-edit-label', 'proxyEditLabel');
+  setText('dialer-proxy-label', 'dialerProxyLabel');
+  setText('dialer-proxy-hint', 'dialerProxyHint');
+  setText('proxy-cancel-btn', 'cancelBtn');
+  setText('proxy-save-btn', 'saveBtn');
   setText('import-btn', 'importBtn');
   setText('import-reset-btn', 'importResetBtn');
   const prevBtn = document.getElementById('btn-prev');
@@ -355,16 +385,18 @@ const DNS_NS_PRESETS = {
 // ============================================================
 const SERVICE_PRESETS = {
   telegram:  { label: 'Telegram',  rules: [{type:'RULE-SET',payload:'telegram',target:'Proxy'}] },
-  discord:   { label: 'Discord',   rules: [{type:'RULE-SET',payload:'geosite-discord',target:'Proxy'}] },
+  discord:   { label: 'Discord',   rules: [
+    {type:'RULE-SET',payload:'geosite-discord',target:'Proxy'},
+    {type:'RULE-SET',payload:'discord-voice',target:'Proxy'}
+  ] },
   youtube:   { label: 'YouTube',   rules: [{type:'RULE-SET',payload:'geosite-youtube',target:'Proxy'}] },
-  twitter:   { label: 'Twitter',   rules: [{type:'RULE-SET',payload:'geosite-twitter',target:'Proxy'}] },
+  twitter:   { label: 'X (Twitter) + Grok', rules: [{type:'RULE-SET',payload:'geosite-twitter',target:'Proxy'}] },
   facebook:  { label: 'Facebook',  rules: [{type:'RULE-SET',payload:'geosite-facebook',target:'Proxy'}] },
   whatsapp:  { label: 'WhatsApp',  rules: [{type:'RULE-SET',payload:'geosite-whatsapp',target:'Proxy'}] },
   instagram: { label: 'Instagram', rules: [{type:'RULE-SET',payload:'geosite-instagram',target:'Proxy'}] },
   chatgpt:   { label: 'ChatGPT',   rules: [{type:'RULE-SET',payload:'geosite-openai',target:'Proxy'}] },
   gemini:    { label: 'Gemini',    rules: [{type:'RULE-SET',payload:'geosite-google-gemini',target:'Proxy'}] },
-  claude:    { label: 'Claude',    rules: [{type:'RULE-SET',payload:'geosite-anthropic',target:'Proxy'}] },
-  roblox:    { label: 'Roblox',    rules: [{type:'RULE-SET',payload:'geosite-roblox',target:'Proxy'}] }
+  claude:    { label: 'Claude',    rules: [{type:'RULE-SET',payload:'geosite-anthropic',target:'Proxy'}] }
 };
 
 const OTHER_PRESETS = {
@@ -377,6 +409,7 @@ const CDN_PROVIDERS = [
   { id: 'akamai',       label: 'Akamai' },
   { id: 'aws',          label: 'AWS' },
   { id: 'buyvm',        label: 'BuyVM' },
+  { id: 'bunny',        label: 'BunnyCDN' },
   { id: 'cdn77',        label: 'CDN77' },
   { id: 'cloudflare',   label: 'Cloudflare' },
   { id: 'cogent',       label: 'Cogent' },

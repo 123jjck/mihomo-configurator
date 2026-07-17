@@ -219,7 +219,19 @@ function addProxyFromFile(input) {
 }
 
 function removeProxy(index) {
-  state.proxies.splice(index, 1);
+  const removed = state.proxies.splice(index, 1)[0];
+  if (removed) {
+    for (const proxy of state.proxies) {
+      if (proxy['dialer-proxy'] === removed.name) delete proxy['dialer-proxy'];
+    }
+  }
+  renderProxies();
+}
+
+function moveProxy(index, dir) {
+  const newIndex = index + dir;
+  if (newIndex < 0 || newIndex >= state.proxies.length) return;
+  [state.proxies[index], state.proxies[newIndex]] = [state.proxies[newIndex], state.proxies[index]];
   renderProxies();
 }
 
@@ -253,6 +265,60 @@ function saveSubscriptionEditor() {
   toast(t('subUpdatedToast', {name: sub.name}), 'success');
 }
 
+function createsDialerProxyCycle(proxyName, targetName) {
+  const visited = new Set();
+  let currentName = targetName;
+  while (currentName) {
+    if (currentName === proxyName) return true;
+    if (visited.has(currentName)) return true;
+    visited.add(currentName);
+    const current = state.proxies.find(proxy => proxy.name === currentName);
+    currentName = current && current['dialer-proxy'];
+  }
+  return false;
+}
+
+function openProxyEditor(index) {
+  const proxy = state.proxies[index];
+  if (!proxy) return;
+  document.getElementById('proxy-edit-index').value = String(index);
+  document.getElementById('proxy-edit-name').textContent = proxy.name;
+
+  const select = document.getElementById('proxy-edit-dialer-proxy');
+  let options = `<option value="">${escHtml(t('dialerProxyNone'))}</option>`;
+  for (const candidate of state.proxies) {
+    if (candidate.name === proxy.name) continue;
+    const disabled = createsDialerProxyCycle(proxy.name, candidate.name);
+    options += `<option value="${escHtml(candidate.name)}" ${disabled ? 'disabled' : ''}>${escHtml(candidate.name)}</option>`;
+  }
+  select.innerHTML = options;
+  select.value = proxy['dialer-proxy'] || '';
+  document.getElementById('proxy-modal').classList.add('show');
+}
+
+function closeProxyEditor() {
+  document.getElementById('proxy-modal').classList.remove('show');
+}
+
+function saveProxyEditor() {
+  const idx = +document.getElementById('proxy-edit-index').value;
+  const proxy = state.proxies[idx];
+  if (!proxy) return;
+  const dialerProxy = document.getElementById('proxy-edit-dialer-proxy').value;
+  if (dialerProxy && createsDialerProxyCycle(proxy.name, dialerProxy)) {
+    toast(t('dialerProxyCycle'), 'error');
+    return;
+  }
+  if (dialerProxy && state.proxies.some(candidate => candidate.name === dialerProxy && candidate !== proxy)) {
+    proxy['dialer-proxy'] = dialerProxy;
+  } else {
+    delete proxy['dialer-proxy'];
+  }
+  closeProxyEditor();
+  renderProxies();
+  toast(t('proxyUpdatedToast', {name: proxy.name}), 'success');
+}
+
 function clearProxies() {
   state.proxies = [];
   state.proxyProviders = [];
@@ -268,11 +334,16 @@ function renderProxies() {
   if (title) title.textContent = t('proxyListTitle', {count: total});
   const proxyRows = state.proxies.map((p, i) =>
     `<tr>` +
-    `<td>${escHtml(p.name)}</td>` +
+    `<td>${escHtml(p.name)}${p['dialer-proxy'] ? `<span class="proxy-chain">${escHtml(t('dialerProxyVia', {name: p['dialer-proxy']}))}</span>` : ''}</td>` +
     `<td><span class="type-badge type-${p.type}">${escHtml(p.type === 'wireguard' && p.awgVersion ? ('amneziawg ' + p.awgVersion) : p.type)}</span></td>` +
     `<td>${escHtml(p.server)}</td>` +
     `<td>${p.port}</td>` +
-    `<td><button class="remove-btn" onclick="removeProxy(${i})" title="${escHtml(t('removeTitle'))}">&times;</button></td>` +
+    `<td class="proxy-actions-cell"><div class="proxy-actions">` +
+    `<button class="remove-btn move-btn" onclick="moveProxy(${i},-1)" title="${escHtml(t('moveUpTitle'))}" aria-label="${escHtml(t('moveUpTitle'))}">&#8593;</button>` +
+    `<button class="remove-btn move-btn" onclick="moveProxy(${i},1)" title="${escHtml(t('moveDownTitle'))}" aria-label="${escHtml(t('moveDownTitle'))}">&#8595;</button>` +
+    `<button class="remove-btn edit-btn" onclick="openProxyEditor(${i})" title="${escHtml(t('editTitle'))}" aria-label="${escHtml(t('editTitle'))}">&#9998;</button>` +
+    `<button class="remove-btn" onclick="removeProxy(${i})" title="${escHtml(t('removeTitle'))}">&times;</button>` +
+    `</div></td>` +
     `</tr>`
   );
   const subRows = state.proxyProviders.map((p, i) =>
@@ -281,10 +352,10 @@ function renderProxies() {
     `<td><span class="type-badge">${escHtml(t('subscriptionType'))}</span></td>` +
     `<td>${escHtml(p.url)}</td>` +
     `<td>-</td>` +
-    `<td class="proxy-actions">` +
+    `<td class="proxy-actions-cell"><div class="proxy-actions">` +
     `<button class="remove-btn edit-btn" onclick="openSubscriptionEditor(${i})" title="${escHtml(t('editTitle'))}" aria-label="${escHtml(t('editTitle'))}">&#9998;</button>` +
     `<button class="remove-btn" onclick="removeProxyProvider(${i})" title="${escHtml(t('removeTitle'))}">&times;</button>` +
-    `</td>` +
+    `</div></td>` +
     `</tr>`
   );
   tbody.innerHTML = [...proxyRows, ...subRows].join('');
@@ -390,6 +461,10 @@ function cdnProviderUrl(id) {
 function telegramProviderUrl() {
   const suffix = state.ipv6 ? '_plain.txt' : '_plain_ipv4.txt';
   return `https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/refs/heads/main/telegram/telegram${suffix}`;
+}
+
+function discordVoiceProviderUrl() {
+  return 'https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/refs/heads/main/discord-voice/discord-voice_plain_ipv4.txt';
 }
 
 function ruBlockedProviderUrl() {

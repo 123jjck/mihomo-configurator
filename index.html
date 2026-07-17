@@ -209,6 +209,23 @@
   </div>
 </div>
 
+<div class="modal" id="proxy-modal" onclick="if(event.target===this)closeProxyEditor()">
+  <div class="modal-card">
+    <h3 id="proxy-modal-title">Параметры сервера</h3>
+    <p class="hint"><span id="proxy-edit-label">Сервер:</span> <span id="proxy-edit-name"></span></p>
+    <input type="hidden" id="proxy-edit-index">
+    <div class="field">
+      <label class="field-label" id="dialer-proxy-label" for="proxy-edit-dialer-proxy">Подключаться через другой сервер</label>
+      <select class="field-input" id="proxy-edit-dialer-proxy"></select>
+      <p class="hint field-hint" id="dialer-proxy-hint">Выбранный сервер будет использоваться для подключения к этому серверу.</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="proxy-cancel-btn" onclick="closeProxyEditor()">Отмена</button>
+      <button class="btn btn-primary" id="proxy-save-btn" onclick="saveProxyEditor()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
 <script src="app/state.js"></script>
 <script src="app/parsers.js"></script>
