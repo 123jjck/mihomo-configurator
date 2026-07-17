@@ -390,7 +390,7 @@ const SERVICE_PRESETS = {
     {type:'RULE-SET',payload:'discord-voice',target:'Proxy'}
   ] },
   youtube:   { label: 'YouTube',   rules: [{type:'RULE-SET',payload:'geosite-youtube',target:'Proxy'}] },
-  twitter:   { label: 'X (Twitter) + Grok', rules: [{type:'RULE-SET',payload:'geosite-twitter',target:'Proxy'}] },
+  twitter:   { label: 'X (Twitter) + Grok', rules: [{type:'RULE-SET',payload:'geosite-x',target:'Proxy'}] },
   facebook:  { label: 'Facebook',  rules: [{type:'RULE-SET',payload:'geosite-facebook',target:'Proxy'}] },
   whatsapp:  { label: 'WhatsApp',  rules: [{type:'RULE-SET',payload:'geosite-whatsapp',target:'Proxy'}] },
   instagram: { label: 'Instagram', rules: [{type:'RULE-SET',payload:'geosite-instagram',target:'Proxy'}] },
