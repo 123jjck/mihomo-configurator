@@ -45,9 +45,16 @@ const exportedNames = [
   'toggleCdn',
   'togglePreset',
   'renderAllPresets',
+  'renderProxies',
   'renderRules',
   'renderTargetSelects',
   'buildTargetOptions',
+  'openProxyEditor',
+  'closeProxyEditor',
+  'saveProxyEditor',
+  'createsDialerProxyCycle',
+  'removeProxy',
+  'moveProxy',
   'setLanguage'
 ];
 

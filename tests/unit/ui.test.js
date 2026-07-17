@@ -44,6 +44,12 @@ describe('UI state helpers', () => {
     expect(app.state.rules.map(rule => rule.payload)).toEqual(['cdn-all']);
   });
 
+  it('exposes BunnyCDN and the updated popular service list', () => {
+    expect(app.CDN_PROVIDERS).toContainEqual({ id: 'bunny', label: 'BunnyCDN' });
+    expect(app.SERVICE_PRESETS.twitter.label).toBe('X (Twitter) + Grok');
+    expect(app.SERVICE_PRESETS.roblox).toBeUndefined();
+  });
+
   it('prioritizes Telegram rule rendering before other rules for stable sniffing config', () => {
     app.state.rules = [
       { type: 'DOMAIN-SUFFIX', payload: 'example.com', target: 'DIRECT' },
@@ -78,11 +84,64 @@ describe('UI state helpers', () => {
     expect(ctx.document.getElementById('rule-target').value).toBe('Proxy');
   });
 
+  it('edits a server dialer-proxy and clears references when the dialer is removed', () => {
+    app.state.proxies = [
+      { name: 'Exit', type: 'ss', server: 'exit.example.com', port: 443 },
+      { name: 'Dialer', type: 'ss', server: 'dialer.example.com', port: 443 }
+    ];
+    app.renderProxies();
+
+    app.openProxyEditor(0);
+    const select = ctx.document.getElementById('proxy-edit-dialer-proxy');
+    expect([...select.options].map(option => option.value)).toEqual(['', 'Dialer']);
+    select.value = 'Dialer';
+    app.saveProxyEditor();
+
+    expect(app.state.proxies[0]['dialer-proxy']).toBe('Dialer');
+    expect(ctx.document.querySelector('.proxy-chain').textContent).toContain('Dialer');
+
+    app.removeProxy(1);
+    expect(app.state.proxies[0]['dialer-proxy']).toBeUndefined();
+  });
+
+  it('prevents circular dialer-proxy chains', () => {
+    app.state.proxies = [
+      { name: 'First', type: 'ss', server: 'first.example.com', port: 443, 'dialer-proxy': 'Second' },
+      { name: 'Second', type: 'ss', server: 'second.example.com', port: 443 }
+    ];
+
+    app.openProxyEditor(1);
+
+    expect(ctx.document.querySelector('#proxy-edit-dialer-proxy option[value="First"]').disabled).toBe(true);
+  });
+
+  it('changes server order without breaking dialer-proxy references', () => {
+    app.state.proxies = [
+      { name: 'Exit', type: 'ss', server: 'exit.example.com', port: 443, 'dialer-proxy': 'Dialer' },
+      { name: 'Dialer', type: 'ss', server: 'dialer.example.com', port: 443 }
+    ];
+
+    app.moveProxy(0, 1);
+
+    expect(app.state.proxies.map(proxy => proxy.name)).toEqual(['Dialer', 'Exit']);
+    expect(app.state.proxies[1]['dialer-proxy']).toBe('Dialer');
+    expect(ctx.document.querySelectorAll('.proxy-actions-cell')).toHaveLength(2);
+    expect(ctx.document.querySelectorAll('.proxy-actions-cell')[0].querySelectorAll('button')).toHaveLength(4);
+  });
+
   it('switches localization and updates static labels', () => {
     app.setLanguage('en', false);
 
     expect(app.state.lang).toBe('en');
     expect(ctx.document.getElementById('servers-title').textContent).toBe('Add Servers');
     expect(ctx.document.getElementById('btn-next').textContent).toContain('Next');
+  });
+
+  it('renders separate desktop, Android, iOS, and router device choices', () => {
+    app.state.step = 3;
+    app.setLanguage('en', false);
+
+    const labels = [...ctx.document.querySelectorAll('#device-presets button')].map(button => button.textContent);
+    expect(labels).toEqual(['Windows / macOS / Linux', 'Android', 'iOS', 'Router (OpenWRT)']);
   });
 });

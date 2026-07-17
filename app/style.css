@@ -75,7 +75,7 @@ textarea.field-input{resize:vertical;font-family:'SF Mono',Monaco,Consolas,'Libe
 /* Proxy Table */
 .proxy-table{width:100%;border-collapse:collapse;font-size:13px}
 .proxy-table th{text-align:left;padding:8px 10px;color:#7b8094;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1.5px solid #ecedf3}
-.proxy-table td{padding:9px 10px;border-bottom:1px solid #f0f1f6;color:#3a3d4a}
+.proxy-table td{padding:9px 10px;border-bottom:1px solid #f0f1f6;color:#3a3d4a;vertical-align:middle}
 .proxy-table tr:last-child td{border-bottom:none}
 .proxy-table .type-badge{display:inline-block;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
 .type-vless{background:#f0eeff;color:#7c6cf1}
@@ -87,9 +87,13 @@ textarea.field-input{resize:vertical;font-family:'SF Mono',Monaco,Consolas,'Libe
 .type-wireguard{background:#e8edfd;color:#3a5bc7}
 .proxy-table .remove-btn{background:none;border:none;cursor:pointer;color:#c0c4d0;font-size:16px;transition:color .15s}
 .proxy-table .remove-btn:hover{color:#e74c5e}
-.proxy-actions{display:flex;align-items:center;gap:8px}
+.proxy-actions-cell{width:1%;white-space:nowrap}
+.proxy-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;min-width:max-content}
+.proxy-table .move-btn{font-size:14px;line-height:1;color:#8a90a4}
+.proxy-table .move-btn:hover{color:#267cff}
 .proxy-table .edit-btn{font-size:12px;line-height:1;color:#8a90a4}
 .proxy-table .edit-btn:hover{color:#267cff}
+.proxy-chain{display:block;margin-top:2px;color:#7b8094;font-size:11px}
 
 /* Presets */
 .presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
@@ -154,6 +158,7 @@ textarea.field-input{resize:vertical;font-family:'SF Mono',Monaco,Consolas,'Libe
 .modal-card{width:min(520px,100%);background:#fff;border:1px solid #ecedf3;border-radius:14px;padding:18px;box-shadow:0 14px 40px rgba(0,0,0,.2)}
 .modal-card h3{font-size:16px;margin-bottom:8px}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
+.field-hint{margin:6px 0 0}
 
 @media(max-width:600px){
   .github-link{position:static;margin-bottom:10px}

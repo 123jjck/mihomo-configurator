@@ -40,6 +40,8 @@ describe('mihomo YAML generation', () => {
 
     expect(doc.mode).toBe('rule');
     expect(doc.ipv6).toBe(false);
+    expect(doc['keep-alive-idle']).toBe(30);
+    expect(doc['keep-alive-interval']).toBe(15);
     expect(doc.dns).toMatchObject({
       enable: true,
       listen: '127.0.0.1:7874',
@@ -97,11 +99,59 @@ describe('mihomo YAML generation', () => {
     const doc = yaml.load(app.generateConfig());
 
     expect(doc).toMatchObject({
+      'external-controller': '0.0.0.0:9090',
+      'keep-alive-idle': 30,
+      'keep-alive-interval': 15,
       'external-ui': './ui',
       'external-ui-url': 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip',
       'tproxy-port': 7894,
       'routing-mark': 2
     });
+  });
+
+  it.each(['android', 'ios'])('uses mobile keep-alive values for %s', device => {
+    app.state.device = device;
+
+    const doc = yaml.load(app.generateConfig());
+
+    expect(doc['keep-alive-idle']).toBe(600);
+    expect(doc['keep-alive-interval']).toBe(30);
+  });
+
+  it('writes dialer-proxy for an edited server', async () => {
+    const exit = await app.parseProxyUrl('ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpzZWNyZXQ@exit.example.com:8388#Exit');
+    const dialer = await app.parseProxyUrl('trojan://pass@dialer.example.com:443#Dialer');
+    exit['dialer-proxy'] = dialer.name;
+    app.state.proxies = [exit, dialer];
+
+    const doc = yaml.load(app.generateConfig());
+
+    expect(doc.proxies[0]['dialer-proxy']).toBe('Dialer');
+  });
+
+  it('adds Discord Voice rules and provider when the Discord preset is selected', () => {
+    app.togglePreset('services', 'discord');
+
+    const doc = yaml.load(app.generateConfig());
+
+    expect(doc['rule-providers']['discord-voice']).toEqual({
+      behavior: 'ipcidr',
+      type: 'http',
+      url: 'https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/refs/heads/main/discord-voice/discord-voice_plain_ipv4.txt',
+      interval: 86400,
+      format: 'text'
+    });
+    expect(doc.rules).toContain('RULE-SET,discord-voice,Proxy');
+  });
+
+  it('uses the BunnyCDN IPv4 range for IPv4 configs', () => {
+    app.toggleCdn('bunny');
+
+    const doc = yaml.load(app.generateConfig());
+
+    expect(doc['rule-providers']['cdn-bunny'].url).toBe(
+      'https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/refs/heads/main/bunny/bunny_plain_ipv4.txt'
+    );
   });
 
   it('quotes YAML scalars that could otherwise be parsed as booleans, numbers, or syntax', () => {
