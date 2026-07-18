@@ -238,6 +238,9 @@ function parseMihomoVShareLink(rawUrl, scheme, { decodeBase64Host = false } = {}
       } catch {
         // Ignore malformed xhttp extra payloads.
       }
+      if (proxy['xhttp-opts'].mode === 'stream-one') {
+        delete proxy['xhttp-opts']['download-settings'];
+      }
       break;
     default:
       break;
