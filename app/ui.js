@@ -542,9 +542,9 @@ function renderRules() {
 }
 
 function targetColor(v) {
-  if (v === 'REJECT') return '#e74c5e';
-  if (v === 'DIRECT') return '#34c77b';
-  return '#267cff';
+  if (v === 'REJECT') return 'var(--danger)';
+  if (v === 'DIRECT') return 'var(--success)';
+  return 'var(--accent)';
 }
 
 function changeRuleTarget(index, value) {
