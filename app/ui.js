@@ -91,30 +91,50 @@ function prevStep() { goToStep(state.step - 1); }
 // ============================================================
 // DNS (Step 1)
 // ============================================================
+const DNS_UI = {
+  default: {
+    presets: () => DNS_DEFAULT_PRESETS,
+    list: () => state.dns.defaultNs,
+    key: 'defaultNs',
+    containerId: 'dns-default-presets',
+    listId: 'dns-default-list',
+    inputId: 'dns-default-input'
+  },
+  ns: {
+    presets: () => DNS_NS_PRESETS,
+    list: () => state.dns.nameservers,
+    key: 'nameservers',
+    containerId: 'dns-ns-presets',
+    listId: 'dns-ns-list',
+    inputId: 'dns-ns-input'
+  }
+};
+
+function dnsUi(type) {
+  return DNS_UI[type] || DNS_UI.default;
+}
+
 function isDnsPresetActive(type, id) {
-  const presets = type === 'default' ? DNS_DEFAULT_PRESETS : DNS_NS_PRESETS;
-  const list = type === 'default' ? state.dns.defaultNs : state.dns.nameservers;
-  return presets[id].servers.every(s => list.includes(s));
+  const ui = dnsUi(type);
+  return ui.presets()[id].servers.every(s => ui.list().includes(s));
 }
 
 function renderDnsPresets(type) {
-  const presets = type === 'default' ? DNS_DEFAULT_PRESETS : DNS_NS_PRESETS;
-  const containerId = type === 'default' ? 'dns-default-presets' : 'dns-ns-presets';
-  document.getElementById(containerId).innerHTML = Object.entries(presets).map(([id, p]) =>
+  const ui = dnsUi(type);
+  document.getElementById(ui.containerId).innerHTML = Object.entries(ui.presets()).map(([id, p]) =>
     `<button class="preset-btn ${isDnsPresetActive(type, id) ? 'active' : ''}" onclick="toggleDnsPreset('${type}','${id}')">${p.label}</button>`
   ).join('');
 }
 
 function toggleDnsPreset(type, id) {
-  const presets = type === 'default' ? DNS_DEFAULT_PRESETS : DNS_NS_PRESETS;
-  const key = type === 'default' ? 'defaultNs' : 'nameservers';
-  const servers = presets[id].servers;
+  const ui = dnsUi(type);
+  const servers = ui.presets()[id].servers;
 
   if (isDnsPresetActive(type, id)) {
-    state.dns[key] = state.dns[key].filter(s => !servers.includes(s));
+    state.dns[ui.key] = state.dns[ui.key].filter(s => !servers.includes(s));
   } else {
     for (const s of servers) {
-      if (!state.dns[key].includes(s)) state.dns[key].push(s);
+      if (!state.dns[ui.key].includes(s)) state.dns[ui.key].push(s);
     }
   }
   renderDnsPresets(type);
@@ -122,9 +142,9 @@ function toggleDnsPreset(type, id) {
 }
 
 function renderDnsList(type) {
-  const listId = type === 'default' ? 'dns-default-list' : 'dns-ns-list';
-  const arr = type === 'default' ? state.dns.defaultNs : state.dns.nameservers;
-  document.getElementById(listId).innerHTML = arr.length === 0
+  const ui = dnsUi(type);
+  const arr = ui.list();
+  document.getElementById(ui.listId).innerHTML = arr.length === 0
     ? `<div class="empty">${t('emptyServers')}</div>`
     : arr.map((s, i) =>
       `<div class="list-item">` +
@@ -136,13 +156,12 @@ function renderDnsList(type) {
 }
 
 function addDnsServer(type) {
-  const inputId = type === 'default' ? 'dns-default-input' : 'dns-ns-input';
-  const key = type === 'default' ? 'defaultNs' : 'nameservers';
-  const input = document.getElementById(inputId);
+  const ui = dnsUi(type);
+  const input = document.getElementById(ui.inputId);
   const val = input.value.trim();
   if (!val) return;
-  if (!state.dns[key].includes(val)) {
-    state.dns[key].push(val);
+  if (!state.dns[ui.key].includes(val)) {
+    state.dns[ui.key].push(val);
   }
   input.value = '';
   renderDnsPresets(type);
@@ -150,10 +169,25 @@ function addDnsServer(type) {
 }
 
 function removeDnsServer(type, index) {
-  const key = type === 'default' ? 'defaultNs' : 'nameservers';
-  state.dns[key].splice(index, 1);
+  const ui = dnsUi(type);
+  state.dns[ui.key].splice(index, 1);
   renderDnsPresets(type);
   renderDnsList(type);
+}
+
+/** Re-render the main editor UI after import/reset/language change. */
+function renderAll({ includeDevices = false, includePreview = false } = {}) {
+  renderDnsPresets('default');
+  renderDnsPresets('ns');
+  renderDnsList('default');
+  renderDnsList('ns');
+  renderProxies();
+  renderAllPresets();
+  renderRules();
+  renderTargetSelects();
+  if (includeDevices) renderDevices();
+  updateFooterValidation();
+  if (includePreview) renderPreview();
 }
 
 // ============================================================
@@ -184,9 +218,7 @@ async function addProxiesFromUrls() {
       addedSubs++;
       continue;
     }
-    if (!proxy) {
-      failed++;
-    }
+    failed++;
   }
   ta.value = '';
   renderProxies();
@@ -201,9 +233,7 @@ function addProxyFromFile(input) {
   const reader = new FileReader();
   reader.onload = () => {
     const proxy = parseWireGuardConfig(reader.result);
-    if (proxy && proxy.error) {
-      toast(t('proxyAddFailed'), 'error');
-    } else if (proxy) {
+    if (proxy) {
       proxy.name = uniqueServerName(proxy.name);
       state.proxies.push(proxy);
       renderProxies();
@@ -366,7 +396,7 @@ function renderProxies() {
 // ============================================================
 // Rules (Step 3)
 // ============================================================
-function buildTargetOptions(currentValue, includeReject) {
+function buildTargetOptions(includeReject) {
   let opts = '<option value="Proxy">Proxy</option>';
   for (const p of state.proxies) {
     opts += `<option value="${escHtml(p.name)}">${escHtml(p.name)}</option>`;
@@ -382,8 +412,8 @@ function renderTargetSelects() {
   const prevRule = ruleTarget.value || 'Proxy';
   const prevMatch = matchTarget.value || state.matchTarget;
 
-  ruleTarget.innerHTML = buildTargetOptions(prevRule, true);
-  matchTarget.innerHTML = buildTargetOptions(prevMatch, false);
+  ruleTarget.innerHTML = buildTargetOptions(true);
+  matchTarget.innerHTML = buildTargetOptions(false);
 
   ruleTarget.value = prevRule;
   matchTarget.value = prevMatch;
@@ -462,19 +492,28 @@ function toggleCdn(id) {
   renderRules();
 }
 
+const CDN_IP_RANGES_BASE = 'https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/refs/heads/main';
+
+function cdnIpRangesSuffix() {
+  return state.ipv6 ? '_plain.txt' : '_plain_ipv4.txt';
+}
+
+function cdnIpRangesUrl(folder, fileBase, forceIpv4 = false) {
+  const suffix = forceIpv4 ? '_plain_ipv4.txt' : cdnIpRangesSuffix();
+  return `${CDN_IP_RANGES_BASE}/${folder}/${fileBase}${suffix}`;
+}
+
 function cdnProviderUrl(id) {
-  const suffix = state.ipv6 ? '_plain.txt' : '_plain_ipv4.txt';
   const providerId = id === 'all' ? 'cdn-only' : id;
-  return `https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/refs/heads/main/${providerId}/${providerId}${suffix}`;
+  return cdnIpRangesUrl(providerId, providerId);
 }
 
 function telegramProviderUrl() {
-  const suffix = state.ipv6 ? '_plain.txt' : '_plain_ipv4.txt';
-  return `https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/refs/heads/main/telegram/telegram${suffix}`;
+  return cdnIpRangesUrl('telegram', 'telegram');
 }
 
 function discordVoiceProviderUrl() {
-  return 'https://raw.githubusercontent.com/123jjck/cdn-ip-ranges/refs/heads/main/discord-voice/discord-voice_plain_ipv4.txt';
+  return cdnIpRangesUrl('discord-voice', 'discord-voice', true);
 }
 
 function ruBlockedProviderUrl() {
@@ -524,7 +563,7 @@ function renderRules() {
     return;
   }
   list.innerHTML = state.rules.map((r, i) => {
-    const opts = buildTargetOptions(r.target, true);
+    const opts = buildTargetOptions(true);
     return `<div class="rule-item">` +
       `<span class="rule-text">${escHtml(r.type)},${escHtml(r.payload)}</span>` +
       `<select class="rule-target-select" onchange="changeRuleTarget(${i},this.value)">${opts}</select>` +

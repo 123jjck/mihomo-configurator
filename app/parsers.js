@@ -167,6 +167,19 @@ function parseMihomoVShareLink(rawUrl, scheme, { decodeBase64Host = false } = {}
       break;
   }
 
+  if (parseBoolish(p.get('allowInsecure')) || parseBoolish(p.get('insecure'))) {
+    proxy['skip-cert-verify'] = true;
+  }
+  if (scheme === 'vless') {
+    const flow = p.get('flow');
+    if (flow) proxy.flow = flow.toLowerCase();
+    const encryption = p.get('encryption');
+    if (encryption) proxy.encryption = encryption;
+  } else if (scheme === 'vmess') {
+    proxy.alterId = 0;
+    proxy.cipher = p.get('encryption') || 'auto';
+  }
+
   let network = String(p.get('type') || 'tcp').toLowerCase();
   const fakeType = String(p.get('headerType') || '').toLowerCase();
   if (fakeType === 'http') {
@@ -342,11 +355,17 @@ function decodeURIComponentSafe(value) {
   }
 }
 
-function decodeBase64Compat(value) {
+function normalizeBase64(value) {
   let b64 = String(value ?? '').trim();
   if (!b64) return null;
   b64 = b64.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
   b64 += '='.repeat((4 - (b64.length % 4)) % 4);
+  return b64;
+}
+
+function decodeBase64Compat(value) {
+  const b64 = normalizeBase64(value);
+  if (!b64) return null;
   try {
     return atob(b64);
   } catch {
@@ -375,17 +394,7 @@ function parseRelativePathQuery(pathValue) {
 }
 
 function parseVless(rawUrl) {
-  const proxy = parseMihomoVShareLink(rawUrl, 'vless', { decodeBase64Host: true });
-  if (!proxy) return null;
-  const u = parseBase64HostUrl(rawUrl);
-  const p = u?.searchParams;
-  if (!p) return proxy;
-  if (parseBoolish(p.get('allowInsecure')) || parseBoolish(p.get('insecure'))) proxy['skip-cert-verify'] = true;
-  const flow = p.get('flow');
-  if (flow) proxy.flow = flow.toLowerCase();
-  const encryption = p.get('encryption');
-  if (encryption) proxy.encryption = encryption;
-  return proxy;
+  return parseMihomoVShareLink(rawUrl, 'vless', { decodeBase64Host: true });
 }
 
 function parseVmessLegacyFromJson(json) {
@@ -467,16 +476,7 @@ function parseVmessLegacyFromJson(json) {
 }
 
 function parseVmessUrl(rawUrl) {
-  const proxy = parseMihomoVShareLink(rawUrl, 'vmess');
-  if (!proxy) return null;
-  const u = parseUrlOrNull(rawUrl);
-  const p = u?.searchParams;
-  if (p && (parseBoolish(p.get('allowInsecure')) || parseBoolish(p.get('insecure')))) {
-    proxy['skip-cert-verify'] = true;
-  }
-  proxy.alterId = 0;
-  proxy.cipher = p?.get('encryption') || 'auto';
-  return proxy;
+  return parseMihomoVShareLink(rawUrl, 'vmess');
 }
 
 function parseVmess(rawUrl) {
@@ -676,16 +676,8 @@ function parseJsonObjectMaybe(value) {
 }
 
 function decodeBase64UrlToBytes(input) {
-  let b64 = String(input ?? '').trim();
-  if (!b64) return null;
-  b64 = b64.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
-  b64 += '='.repeat((4 - (b64.length % 4)) % 4);
-  let bin;
-  try {
-    bin = atob(b64);
-  } catch {
-    return null;
-  }
+  const bin = decodeBase64Compat(input);
+  if (bin == null) return null;
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;

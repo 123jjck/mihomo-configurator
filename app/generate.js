@@ -1,358 +1,176 @@
 // ============================================================
 // Config Generation (Step 4)
 // ============================================================
-function q(s) {
-  if (s === undefined || s === null) return '""';
-  s = String(s);
-  if (s === '' || /[:#{}[\],&*?|>!%@`'"\\\n\r\t]/.test(s) ||
-      /^(true|false|yes|no|on|off|null|~)$/i.test(s) ||
-      s !== s.trim() || (s.length > 0 && s === String(Number(s)))) {
-    return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n') + '"';
-  }
-  return s;
+
+const YAML_DUMP_OPTS = {
+  lineWidth: -1,
+  noRefs: true,
+  quotingType: '"',
+  forceQuotes: false
+};
+
+function stripProxyForExport(proxy) {
+  const copy = { ...proxy };
+  delete copy.awgVersion;
+  return copy;
 }
 
-function proxyToYaml(p) {
-  let y = `  - name: ${q(p.name)}\n`;
-  y += `    type: ${p.type}\n`;
-  y += `    server: ${q(p.server)}\n`;
-  y += `    port: ${p.port}\n`;
-  if (p['dialer-proxy']) y += `    dialer-proxy: ${q(p['dialer-proxy'])}\n`;
+function ruleSetFlags() {
+  return {
+    telegram: state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'telegram'),
+    discordVoice: state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'discord-voice'),
+    ruBlocked: state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'ru-blocked')
+  };
+}
 
-  switch (p.type) {
-    case 'vless':
-      y += `    uuid: ${p.uuid}\n`;
-      y += `    network: ${p.network || 'tcp'}\n`;
-      if (p.tls) y += `    tls: true\n`;
-      y += `    udp: true\n`;
-      if (p.encryption) y += `    encryption: ${q(p.encryption)}\n`;
-      if (p.servername) y += `    servername: ${q(p.servername)}\n`;
-      if (p['client-fingerprint']) y += `    client-fingerprint: ${p['client-fingerprint']}\n`;
-      if (p.fingerprint) y += `    fingerprint: ${q(p.fingerprint)}\n`;
-      if (p.flow) y += `    flow: ${p.flow}\n`;
-      if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
-      if (p.alpn && p.alpn.length) {
-        y += `    alpn:\n`;
-        for (const a of p.alpn) y += `      - ${q(a)}\n`;
-      }
-      if (p['reality-opts']) {
-        y += `    reality-opts:\n`;
-        if (p['reality-opts']['public-key']) y += `      public-key: ${p['reality-opts']['public-key']}\n`;
-        if (p['reality-opts']['short-id']) y += `      short-id: ${q(p['reality-opts']['short-id'])}\n`;
-      }
-      if (p.xudp) y += `    xudp: true\n`;
-      if (p['packet-addr']) y += `    packet-addr: true\n`;
-      if (p['ws-opts']) {
-        y += `    ws-opts:\n`;
-        y += `      path: ${q(p['ws-opts'].path)}\n`;
-        if (p['ws-opts']['v2ray-http-upgrade']) y += `      v2ray-http-upgrade: true\n`;
-        if (p['ws-opts'].headers) {
-          y += `      headers:\n`;
-          for (const [k, v] of Object.entries(p['ws-opts'].headers))
-            y += `        ${k}: ${q(v)}\n`;
-        }
-      }
-      if (p['grpc-opts']) {
-        y += `    grpc-opts:\n`;
-        y += `      grpc-service-name: ${q(p['grpc-opts']['grpc-service-name'])}\n`;
-      }
-      if (p['h2-opts']) {
-        y += `    h2-opts:\n`;
-        y += `      path: ${q(p['h2-opts'].path)}\n`;
-        y += `      host:\n`;
-        for (const h of p['h2-opts'].host) y += `        - ${q(h)}\n`;
-      }
-      if (p['xhttp-opts']) {
-        const xo = p['xhttp-opts'];
-        y += `    xhttp-opts:\n`;
-        if (xo.path) y += `      path: ${q(xo.path)}\n`;
-        if (xo.host) y += `      host: ${q(xo.host)}\n`;
-        if (xo.mode) y += `      mode: ${q(xo.mode)}\n`;
-        if (xo.headers && typeof xo.headers === 'object') {
-          y += `      headers:\n`;
-          for (const [k, v] of Object.entries(xo.headers))
-            y += `        ${k}: ${q(v)}\n`;
-        }
-        if (xo['no-grpc-header']) y += `      no-grpc-header: true\n`;
-        if (xo['x-padding-bytes']) y += `      x-padding-bytes: ${q(xo['x-padding-bytes'])}\n`;
-        if (typeof xo['x-padding-obfs-mode'] === 'boolean') y += `      x-padding-obfs-mode: ${xo['x-padding-obfs-mode']}\n`;
-        if (xo['x-padding-key']) y += `      x-padding-key: ${q(xo['x-padding-key'])}\n`;
-        if (xo['x-padding-header']) y += `      x-padding-header: ${q(xo['x-padding-header'])}\n`;
-        if (xo['x-padding-placement']) y += `      x-padding-placement: ${q(xo['x-padding-placement'])}\n`;
-        if (xo['x-padding-method']) y += `      x-padding-method: ${q(xo['x-padding-method'])}\n`;
-        if (xo['uplink-http-method']) y += `      uplink-http-method: ${q(xo['uplink-http-method'])}\n`;
-        if (xo['session-placement']) y += `      session-placement: ${q(xo['session-placement'])}\n`;
-        if (xo['session-key']) y += `      session-key: ${q(xo['session-key'])}\n`;
-        if (xo['seq-placement']) y += `      seq-placement: ${q(xo['seq-placement'])}\n`;
-        if (xo['seq-key']) y += `      seq-key: ${q(xo['seq-key'])}\n`;
-        if (xo['uplink-data-placement']) y += `      uplink-data-placement: ${q(xo['uplink-data-placement'])}\n`;
-        if (xo['uplink-data-key']) y += `      uplink-data-key: ${q(xo['uplink-data-key'])}\n`;
-        if (xo['uplink-chunk-size'] != null) y += `      uplink-chunk-size: ${xo['uplink-chunk-size']}\n`;
-        if (xo['sc-max-each-post-bytes'] != null) y += `      sc-max-each-post-bytes: ${xo['sc-max-each-post-bytes']}\n`;
-        if (xo['sc-min-posts-interval-ms'] != null) y += `      sc-min-posts-interval-ms: ${xo['sc-min-posts-interval-ms']}\n`;
-        if (xo['reuse-settings'] && typeof xo['reuse-settings'] === 'object') {
-          y += `      reuse-settings:\n`;
-          for (const [k, v] of Object.entries(xo['reuse-settings']))
-            y += `        ${k}: ${q(String(v))}\n`;
-        }
-        if (xo.mode !== 'stream-one' && xo['download-settings'] && typeof xo['download-settings'] === 'object') {
-          const ds = xo['download-settings'];
-          y += `      download-settings:\n`;
-          if (ds.server) y += `        server: ${q(ds.server)}\n`;
-          if (ds.port != null) y += `        port: ${ds.port}\n`;
-          if (ds.tls) y += `        tls: true\n`;
-          if (ds.servername) y += `        servername: ${q(ds.servername)}\n`;
-          if (ds['client-fingerprint']) y += `        client-fingerprint: ${q(ds['client-fingerprint'])}\n`;
-          if (ds['skip-cert-verify']) y += `        skip-cert-verify: true\n`;
-          if (Array.isArray(ds.alpn) && ds.alpn.length) {
-            y += `        alpn:\n`;
-            for (const a of ds.alpn) y += `          - ${q(a)}\n`;
-          }
-          if (ds['reality-opts'] && typeof ds['reality-opts'] === 'object') {
-            y += `        reality-opts:\n`;
-            if (ds['reality-opts']['public-key']) y += `          public-key: ${ds['reality-opts']['public-key']}\n`;
-            if (ds['reality-opts']['short-id']) y += `          short-id: ${q(ds['reality-opts']['short-id'])}\n`;
-          }
-          if (ds.path) y += `        path: ${q(ds.path)}\n`;
-          if (ds.host) y += `        host: ${q(ds.host)}\n`;
-          if (ds.headers && typeof ds.headers === 'object') {
-            y += `        headers:\n`;
-            for (const [k, v] of Object.entries(ds.headers))
-              y += `          ${k}: ${q(v)}\n`;
-          }
-          if (ds['reuse-settings'] && typeof ds['reuse-settings'] === 'object') {
-            y += `        reuse-settings:\n`;
-            for (const [k, v] of Object.entries(ds['reuse-settings']))
-              y += `          ${k}: ${q(String(v))}\n`;
-          }
-        }
-      }
-      break;
+function geositeProviderNames() {
+  return [...new Set(
+    state.rules
+      .filter(r => r.type === 'RULE-SET' && r.payload.startsWith('geosite-'))
+      .map(r => r.payload)
+  )];
+}
 
-    case 'vmess':
-      y += `    uuid: ${p.uuid}\n`;
-      y += `    alterId: ${p.alterId || 0}\n`;
-      y += `    cipher: ${p.cipher || 'auto'}\n`;
-      if (p.tls) y += `    tls: true\n`;
-      y += `    udp: true\n`;
-      if (p.servername) y += `    servername: ${q(p.servername)}\n`;
-      if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
-      if (p['client-fingerprint']) y += `    client-fingerprint: ${p['client-fingerprint']}\n`;
-      if (p.fingerprint) y += `    fingerprint: ${q(p.fingerprint)}\n`;
-      if (p.alpn && p.alpn.length) {
-        y += `    alpn:\n`;
-        for (const a of p.alpn) y += `      - ${q(a)}\n`;
-      }
-      if (p.network) {
-        y += `    network: ${p.network}\n`;
-        if (p['ws-opts']) {
-          y += `    ws-opts:\n`;
-          y += `      path: ${q(p['ws-opts'].path)}\n`;
-          if (p['ws-opts']['v2ray-http-upgrade']) y += `      v2ray-http-upgrade: true\n`;
-          if (p['ws-opts']['v2ray-http-upgrade-fast-open']) y += `      v2ray-http-upgrade-fast-open: true\n`;
-          if (p['ws-opts']['max-early-data']) y += `      max-early-data: ${p['ws-opts']['max-early-data']}\n`;
-          if (p['ws-opts']['early-data-header-name']) y += `      early-data-header-name: ${q(p['ws-opts']['early-data-header-name'])}\n`;
-          if (p['ws-opts'].headers) {
-            y += `      headers:\n`;
-            for (const [k, v] of Object.entries(p['ws-opts'].headers))
-              y += `        ${k}: ${q(v)}\n`;
-          }
-        }
-        if (p['http-opts']) {
-          y += `    http-opts:\n`;
-          if (p['http-opts'].method) y += `      method: ${q(p['http-opts'].method)}\n`;
-          if (p['http-opts'].path && p['http-opts'].path.length) {
-            y += `      path:\n`;
-            for (const path of p['http-opts'].path) y += `        - ${q(path)}\n`;
-          }
-          if (p['http-opts'].headers) {
-            y += `      headers:\n`;
-            for (const [k, v] of Object.entries(p['http-opts'].headers)) {
-              if (Array.isArray(v)) {
-                y += `        ${k}:\n`;
-                for (const vv of v) y += `          - ${q(vv)}\n`;
-              } else {
-                y += `        ${k}: ${q(v)}\n`;
-              }
-            }
-          }
-        }
-        if (p['h2-opts']) {
-          y += `    h2-opts:\n`;
-          y += `      path: ${q(p['h2-opts'].path)}\n`;
-          if (p['h2-opts'].host && p['h2-opts'].host.length) {
-            y += `      host:\n`;
-            for (const h of p['h2-opts'].host) y += `        - ${q(h)}\n`;
-          }
-        }
-        if (p['grpc-opts']) {
-          y += `    grpc-opts:\n`;
-          y += `      grpc-service-name: ${q(p['grpc-opts']['grpc-service-name'])}\n`;
-        }
-      }
-      break;
+/** Auto-generated rule-providers for geosite / CDN / telegram / discord-voice / ru-blocked. */
+function buildAutoRuleProviders() {
+  const flags = ruleSetFlags();
+  const providers = {};
 
-    case 'ss':
-      y += `    cipher: ${p.cipher}\n`;
-      y += `    password: ${q(p.password)}\n`;
-      y += `    udp: true\n`;
-      if (p['udp-over-tcp']) y += `    udp-over-tcp: true\n`;
-      if (p.plugin) y += `    plugin: ${q(p.plugin)}\n`;
-      if (p['plugin-opts']) {
-        y += `    plugin-opts:\n`;
-        for (const [k, v] of Object.entries(p['plugin-opts'])) {
-          if (typeof v === 'boolean') {
-            y += `      ${k}: ${v ? 'true' : 'false'}\n`;
-          } else {
-            y += `      ${k}: ${q(v)}\n`;
-          }
-        }
-      }
-      break;
-
-    case 'trojan':
-      y += `    password: ${q(p.password)}\n`;
-      y += `    udp: true\n`;
-      if (p.sni) y += `    sni: ${q(p.sni)}\n`;
-      if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
-      if (p['client-fingerprint']) y += `    client-fingerprint: ${p['client-fingerprint']}\n`;
-      if (p.fingerprint) y += `    fingerprint: ${q(p.fingerprint)}\n`;
-      if (p.alpn && p.alpn.length) {
-        y += `    alpn:\n`;
-        for (const a of p.alpn) y += `      - ${q(a)}\n`;
-      }
-      if (p.network) {
-        y += `    network: ${p.network}\n`;
-        if (p['ws-opts']) {
-          y += `    ws-opts:\n`;
-          y += `      path: ${q(p['ws-opts'].path)}\n`;
-          if (p['ws-opts']['v2ray-http-upgrade']) y += `      v2ray-http-upgrade: true\n`;
-          if (p['ws-opts'].headers) {
-            y += `      headers:\n`;
-            for (const [k, v] of Object.entries(p['ws-opts'].headers))
-              y += `        ${k}: ${q(v)}\n`;
-          }
-        }
-        if (p['grpc-opts']) {
-          y += `    grpc-opts:\n`;
-          y += `      grpc-service-name: ${q(p['grpc-opts']['grpc-service-name'])}\n`;
-        }
-      }
-      break;
-
-    case 'hysteria2':
-      if (p.password) y += `    password: ${q(p.password)}\n`;
-      if (p.sni) y += `    sni: ${q(p.sni)}\n`;
-      if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
-      if (p.obfs) y += `    obfs: ${p.obfs}\n`;
-      if (p['obfs-password']) y += `    obfs-password: ${q(p['obfs-password'])}\n`;
-      if (p.fingerprint) y += `    fingerprint: ${q(p.fingerprint)}\n`;
-      if (p.alpn && p.alpn.length) {
-        y += `    alpn:\n`;
-        for (const a of p.alpn) y += `      - ${q(a)}\n`;
-      }
-      if (p.up) y += `    up: ${q(p.up)}\n`;
-      if (p.down) y += `    down: ${q(p.down)}\n`;
-      break;
-
-    case 'tuic':
-      if (p.uuid) y += `    uuid: ${q(p.uuid)}\n`;
-      if (p.password) y += `    password: ${q(p.password)}\n`;
-      if (p.token) y += `    token: ${q(p.token)}\n`;
-      if (p.udp) y += `    udp: true\n`;
-      if (p.sni) y += `    sni: ${q(p.sni)}\n`;
-      if (p.alpn && p.alpn.length) {
-        y += `    alpn:\n`;
-        for (const a of p.alpn) y += `      - ${q(a)}\n`;
-      }
-      if (p['disable-sni']) y += `    disable-sni: true\n`;
-      if (p['congestion-controller']) y += `    congestion-controller: ${p['congestion-controller']}\n`;
-      if (p['udp-relay-mode']) y += `    udp-relay-mode: ${p['udp-relay-mode']}\n`;
-      break;
-
-    case 'wireguard':
-      y += `    ip: ${p.ip}\n`;
-      if (p.ipv6) y += `    ipv6: ${p.ipv6}\n`;
-      y += `    private-key: ${p['private-key']}\n`;
-      y += `    public-key: ${p['public-key']}\n`;
-      y += `    udp: true\n`;
-      if (p.mtu) y += `    mtu: ${p.mtu}\n`;
-      if (p['pre-shared-key']) y += `    pre-shared-key: ${q(p['pre-shared-key'])}\n`;
-      if (p.dns) {
-        y += `    dns:\n`;
-        for (const d of p.dns) y += `      - ${d}\n`;
-      }
-      if (p['amnezia-wg-option']) {
-        y += `    amnezia-wg-option:\n`;
-        for (const [k, v] of Object.entries(p['amnezia-wg-option'])) {
-          if (typeof v === 'number') {
-            y += `      ${k}: ${v}\n`;
-          } else {
-            y += `      ${k}: ${q(v)}\n`;
-          }
-        }
-      }
-      break;
-
-    case 'hysteria':
-      if (p.auth_str) y += `    auth_str: ${q(p.auth_str)}\n`;
-      if (p.obfs) y += `    obfs: ${q(p.obfs)}\n`;
-      if (p.sni) y += `    sni: ${q(p.sni)}\n`;
-      if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
-      if (p.alpn && p.alpn.length) {
-        y += `    alpn:\n`;
-        for (const a of p.alpn) y += `      - ${q(a)}\n`;
-      }
-      if (p.protocol) y += `    protocol: ${q(p.protocol)}\n`;
-      if (p.up) y += `    up: ${q(p.up)}\n`;
-      if (p.down) y += `    down: ${q(p.down)}\n`;
-      break;
-
-    case 'ssr':
-      y += `    cipher: ${p.cipher}\n`;
-      y += `    password: ${q(p.password)}\n`;
-      y += `    obfs: ${q(p.obfs)}\n`;
-      y += `    protocol: ${q(p.protocol)}\n`;
-      y += `    udp: true\n`;
-      if (p['obfs-param']) y += `    obfs-param: ${q(p['obfs-param'])}\n`;
-      if (p['protocol-param']) y += `    protocol-param: ${q(p['protocol-param'])}\n`;
-      break;
-
-    case 'socks5':
-      if (p.username) y += `    username: ${q(p.username)}\n`;
-      if (p.password) y += `    password: ${q(p.password)}\n`;
-      if (p.tls) y += `    tls: true\n`;
-      if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
-      break;
-
-    case 'http':
-      if (p.username) y += `    username: ${q(p.username)}\n`;
-      if (p.password) y += `    password: ${q(p.password)}\n`;
-      if (p.tls) y += `    tls: true\n`;
-      if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
-      break;
-
-    case 'anytls':
-      y += `    username: ${q(p.username)}\n`;
-      y += `    password: ${q(p.password)}\n`;
-      if (p.sni) y += `    sni: ${q(p.sni)}\n`;
-      if (p.fingerprint) y += `    fingerprint: ${q(p.fingerprint)}\n`;
-      if (p['skip-cert-verify']) y += `    skip-cert-verify: true\n`;
-      if (p.udp) y += `    udp: true\n`;
-      break;
-
-    case 'mieru':
-      y += `    transport: ${q(p.transport)}\n`;
-      if (p['port-range']) y += `    port-range: ${q(p['port-range'])}\n`;
-      y += `    username: ${q(p.username)}\n`;
-      y += `    password: ${q(p.password)}\n`;
-      if (p.multiplexing) y += `    multiplexing: ${q(p.multiplexing)}\n`;
-      if (p['handshake-mode']) y += `    handshake-mode: ${q(p['handshake-mode'])}\n`;
-      if (p['traffic-pattern']) y += `    traffic-pattern: ${q(p['traffic-pattern'])}\n`;
-      if (p.udp) y += `    udp: true\n`;
-      break;
+  for (const name of geositeProviderNames()) {
+    const siteName = name.slice('geosite-'.length);
+    providers[name] = {
+      behavior: 'domain',
+      type: 'http',
+      url: `https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/${siteName}.yaml`,
+      interval: 86400
+    };
   }
-  return y;
+
+  for (const id of state.activeCdnProviders) {
+    providers['cdn-' + id] = {
+      behavior: 'ipcidr',
+      type: 'http',
+      url: cdnProviderUrl(id),
+      interval: 86400,
+      format: 'text'
+    };
+  }
+
+  if (flags.telegram) {
+    providers.telegram = {
+      behavior: 'ipcidr',
+      type: 'http',
+      url: telegramProviderUrl(),
+      interval: 86400,
+      format: 'text'
+    };
+  }
+
+  if (flags.discordVoice) {
+    providers['discord-voice'] = {
+      behavior: 'ipcidr',
+      type: 'http',
+      url: discordVoiceProviderUrl(),
+      interval: 86400,
+      format: 'text'
+    };
+  }
+
+  if (flags.ruBlocked) {
+    providers['ru-blocked'] = {
+      behavior: 'domain',
+      type: 'http',
+      url: ruBlockedProviderUrl(),
+      interval: 86400,
+      format: 'text'
+    };
+  }
+
+  return providers;
+}
+
+function buildRulesList() {
+  const rules = state.rules.map(r => `${r.type},${r.payload},${r.target}`);
+  if (state.matchTarget === 'Proxy') {
+    for (const r of PRIVATE_NETWORK_RULES) rules.push(r);
+  }
+  rules.push(`MATCH,${state.matchTarget}`);
+  return rules;
+}
+
+function buildHttpProxyProviders() {
+  const providers = {};
+  for (const p of state.proxyProviders) {
+    providers[p.name] = {
+      type: 'http',
+      url: p.url,
+      interval: p.interval || 3600
+    };
+    if (p.filter) providers[p.name].filter = p.filter;
+    if (p['exclude-filter']) providers[p.name]['exclude-filter'] = p['exclude-filter'];
+  }
+  return providers;
+}
+
+function buildProxySelectGroup() {
+  const proxyNames = state.proxies.map(p => p.name);
+  const providerNames = state.proxyProviders.map(p => p.name);
+  const group = { name: 'Proxy', type: 'select', proxies: [...proxyNames] };
+  if (!providerNames.length) group.proxies.push('DIRECT');
+  if (providerNames.length) group.use = [...providerNames];
+  return group;
+}
+
+function buildSnifferConfig(telegramEnabled) {
+  const sniffer = {
+    enable: true,
+    'force-dns-mapping': true,
+    'parse-pure-ip': true,
+    'override-destination': false,
+    sniff: {
+      HTTP: { ports: [80, '8080-8880'], 'override-destination': false },
+      TLS: { ports: [443, 8443], 'override-destination': false },
+      QUIC: { ports: [443, 8443], 'override-destination': false }
+    },
+    'skip-domain': [
+      'Mijia Cloud',
+      '+.lan',
+      '+.local',
+      '+.push.apple.com',
+      '+.apple.com',
+      '+.msftconnecttest.com',
+      '+.3gppnetwork'
+    ]
+  };
+  if (telegramEnabled) {
+    sniffer['skip-dst-address'] = [...TELEGRAM_SNIFFER_SKIP_DST];
+  }
+  return sniffer;
+}
+
+/** Dump config object to YAML with blank lines between top-level multi-line sections. */
+function dumpYamlConfig(config) {
+  const raw = jsyaml.dump(config, YAML_DUMP_OPTS);
+  const lines = raw.split('\n');
+  const result = [];
+  let prevBlockWasMultiLine = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const isTopLevel = line.length > 0 && /^\S/.test(line);
+    if (isTopLevel && i > 0) {
+      const nextIsChild = i + 1 < lines.length && /^[ -]/.test(lines[i + 1]);
+      if (prevBlockWasMultiLine || nextIsChild) {
+        if (result.length > 0 && result[result.length - 1] !== '') {
+          result.push('');
+        }
+      }
+    }
+    if (isTopLevel) {
+      prevBlockWasMultiLine = i + 1 < lines.length && /^[ -]/.test(lines[i + 1]);
+    }
+    result.push(line);
+  }
+  return result.join('\n');
 }
 
 function generateConfig() {
@@ -368,208 +186,81 @@ function keepAliveForDevice() {
 }
 
 function generateFresh() {
-  let y = '';
-  const telegramEnabled = state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'telegram');
-  const discordVoiceEnabled = state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'discord-voice');
-  const ruBlockedEnabled = state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'ru-blocked');
+  const flags = ruleSetFlags();
   const isRouterConfig = state.device === 'router';
   const keepAlive = keepAliveForDevice();
+  const autoRuleProviders = buildAutoRuleProviders();
 
-  // General
-  y += `mode: rule\n`;
-  y += `ipv6: ${state.ipv6}\n`;
-  y += `log-level: error\n`;
-  y += `allow-lan: false\n`;
-  y += `unified-delay: true\n`;
-  y += `tcp-concurrent: true\n`;
-  y += `external-controller: ${isRouterConfig ? '0.0.0.0' : '127.0.0.1'}:9090\n`;
+  const config = {
+    mode: 'rule',
+    ipv6: state.ipv6,
+    'log-level': 'error',
+    'allow-lan': false,
+    'unified-delay': true,
+    'tcp-concurrent': true,
+    'external-controller': `${isRouterConfig ? '0.0.0.0' : '127.0.0.1'}:9090`
+  };
+
   if (isRouterConfig) {
-    y += `external-ui: ./ui\n`;
-    y += `external-ui-url: "https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip"\n`;
-    y += `tproxy-port: 7894\n`;
-    y += `routing-mark: 2\n`;
+    config['external-ui'] = './ui';
+    config['external-ui-url'] = 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip';
+    config['tproxy-port'] = 7894;
+    config['routing-mark'] = 2;
   }
-  y += `\n`;
 
-  // DNS
-  y += `dns:\n`;
-  y += `  enable: true\n`;
-  y += `  listen: 127.0.0.1:7874\n`;
-  y += `  ipv6: ${state.ipv6}\n`;
+  config.dns = {
+    enable: true,
+    listen: '127.0.0.1:7874',
+    ipv6: state.ipv6
+  };
   if (state.dns.defaultNs.length) {
-    y += `  default-nameserver:\n`;
-    for (const ns of state.dns.defaultNs) y += `    - ${ns}\n`;
+    config.dns['default-nameserver'] = [...state.dns.defaultNs];
   }
   if (state.dns.nameservers.length) {
-    y += `  nameserver:\n`;
-    for (const ns of state.dns.nameservers) y += `    - ${q(ns)}\n`;
+    config.dns.nameserver = [...state.dns.nameservers];
   }
-  y += `\n`;
 
-  // Keep-alive
-  y += `keep-alive-idle: ${keepAlive.idle}\n`;
-  y += `keep-alive-interval: ${keepAlive.interval}\n`;
-  y += `\n`;
+  config['keep-alive-idle'] = keepAlive.idle;
+  config['keep-alive-interval'] = keepAlive.interval;
 
-  // Profile
-  y += `profile:\n`;
-  y += `  store-selected: true\n`;
-  y += `  tracing: false\n`;
-  y += `\n`;
+  config.profile = {
+    'store-selected': true,
+    tracing: false
+  };
 
-  // Sniffer
-  y += `sniffer:\n`;
-  y += `  enable: true\n`;
-  y += `  force-dns-mapping: true\n`;
-  y += `  parse-pure-ip: true\n`;
-  y += `  override-destination: false\n`;
-  y += `  sniff:\n`;
-  y += `    HTTP:\n`;
-  y += `      ports: [80, 8080-8880]\n`;
-  y += `      override-destination: false\n`;
-  y += `    TLS:\n`;
-  y += `      ports: [443, 8443]\n`;
-  y += `      override-destination: false\n`;
-  y += `    QUIC:\n`;
-  y += `      ports: [443, 8443]\n`;
-  y += `      override-destination: false\n`;
-  y += `  skip-domain:\n`;
-  y += `    - "Mijia Cloud"\n`;
-  y += `    - '+.lan'\n`;
-  y += `    - '+.local'\n`;
-  y += `    - '+.push.apple.com'\n`;
-  y += `    - '+.apple.com'\n`;
-  y += `    - '+.msftconnecttest.com'\n`;
-  y += `    - '+.3gppnetwork'\n`;
-  if (telegramEnabled) {
-    y += `  skip-dst-address:\n`;
-    for (const cidr of TELEGRAM_SNIFFER_SKIP_DST) y += `    - ${cidr}\n`;
-  }
-  y += `\n`;
+  config.sniffer = buildSnifferConfig(flags.telegram);
 
-  // Proxies and providers
-  if (state.proxies.length) {
-    y += `proxies:\n`;
-    for (const p of state.proxies) y += proxyToYaml(p);
-    y += `\n`;
-  } else {
-    y += `proxies:\n`;
-    y += `\n`;
-  }
+  config.proxies = state.proxies.map(stripProxyForExport);
 
   if (state.proxyProviders.length) {
-    y += `proxy-providers:\n`;
-    for (const p of state.proxyProviders) {
-      y += `  ${q(p.name)}:\n`;
-      y += `    type: http\n`;
-      y += `    url: ${q(p.url)}\n`;
-      y += `    interval: 3600\n`;
-      if (p.filter) y += `    filter: ${q(p.filter)}\n`;
-      if (p['exclude-filter']) y += `    exclude-filter: ${q(p['exclude-filter'])}\n`;
-    }
-    y += `\n`;
+    config['proxy-providers'] = buildHttpProxyProviders();
   }
 
   if (state.proxies.length || state.proxyProviders.length) {
-    const names = state.proxies.map(p => q(p.name));
-    const providerNames = state.proxyProviders.map(p => q(p.name));
-    y += `proxy-groups:\n`;
-    y += `  - name: Proxy\n`;
-    y += `    type: select\n`;
-    y += `    proxies:\n`;
-    for (const n of names) y += `      - ${n}\n`;
-    if (!providerNames.length) y += `      - DIRECT\n`;
-    if (providerNames.length) {
-      y += `    use:\n`;
-      for (const n of providerNames) y += `      - ${n}\n`;
-    }
+    config['proxy-groups'] = [buildProxySelectGroup()];
   } else {
-    y += `proxy-groups:\n`;
-  }
-  y += `\n`;
-
-  // Rule providers (geosite + CDN + Telegram + Discord Voice + ru-blocked)
-  const needTelegram = telegramEnabled;
-  const needDiscordVoice = discordVoiceEnabled;
-  const needRuBlocked = ruBlockedEnabled;
-  const geositeProviders = [...new Set(
-    state.rules
-      .filter(r => r.type === 'RULE-SET' && r.payload.startsWith('geosite-'))
-      .map(r => r.payload)
-  )];
-  const hasProviders = state.activeCdnProviders.size > 0 || needTelegram || needDiscordVoice || needRuBlocked || geositeProviders.length > 0;
-  if (hasProviders) {
-    y += `rule-providers:\n`;
-    for (const name of geositeProviders) {
-      const siteName = name.slice('geosite-'.length);
-      y += `  ${name}:\n`;
-      y += `    behavior: domain\n`;
-      y += `    type: http\n`;
-      y += `    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/${siteName}.yaml"\n`;
-      y += `    interval: 86400\n`;
-    }
-    for (const id of state.activeCdnProviders) {
-      y += `  cdn-${id}:\n`;
-      y += `    behavior: ipcidr\n`;
-      y += `    type: http\n`;
-      y += `    url: "${cdnProviderUrl(id)}"\n`;
-      y += `    interval: 86400\n`;
-      y += `    format: text\n`;
-    }
-    if (needTelegram) {
-      y += `  telegram:\n`;
-      y += `    behavior: ipcidr\n`;
-      y += `    type: http\n`;
-      y += `    url: "${telegramProviderUrl()}"\n`;
-      y += `    interval: 86400\n`;
-      y += `    format: text\n`;
-    }
-    if (needDiscordVoice) {
-      y += `  discord-voice:\n`;
-      y += `    behavior: ipcidr\n`;
-      y += `    type: http\n`;
-      y += `    url: "${discordVoiceProviderUrl()}"\n`;
-      y += `    interval: 86400\n`;
-      y += `    format: text\n`;
-    }
-    if (needRuBlocked) {
-      y += `  ru-blocked:\n`;
-      y += `    behavior: domain\n`;
-      y += `    type: http\n`;
-      y += `    url: "${ruBlockedProviderUrl()}"\n`;
-      y += `    interval: 86400\n`;
-      y += `    format: text\n`;
-    }
-    y += `\n`;
+    config['proxy-groups'] = [];
   }
 
-  // Rules
-  y += `rules:\n`;
-  for (const r of state.rules) {
-    y += `  - ${r.type},${r.payload},${r.target}\n`;
+  if (Object.keys(autoRuleProviders).length) {
+    config['rule-providers'] = autoRuleProviders;
   }
-  if (state.matchTarget === 'Proxy') {
-    for (const r of PRIVATE_NETWORK_RULES) y += `  - ${r}\n`;
-  }
-  y += `  - MATCH,${state.matchTarget}\n`;
 
-  return y;
+  config.rules = buildRulesList();
+
+  return dumpYamlConfig(config);
 }
 
 function generateFromImported() {
   const config = structuredClone(state.importedRawConfig);
-  const telegramEnabled = state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'telegram');
-  const discordVoiceEnabled = state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'discord-voice');
-  const ruBlockedEnabled = state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'ru-blocked');
+  const flags = ruleSetFlags();
   const keepAlive = keepAliveForDevice();
 
-  // Update editable top-level fields
   config.ipv6 = state.ipv6;
   config['external-controller'] = state.device === 'router' ? '0.0.0.0:9090' : '127.0.0.1:9090';
   config['keep-alive-idle'] = keepAlive.idle;
   config['keep-alive-interval'] = keepAlive.interval;
 
-  // Update DNS
   if (!config.dns) config.dns = {};
   config.dns.ipv6 = state.ipv6;
   if (state.dns.defaultNs.length) {
@@ -583,85 +274,43 @@ function generateFromImported() {
     delete config.dns.nameserver;
   }
 
-  // Rebuild proxies — strip internal fields like awgVersion
-  config.proxies = state.proxies.map(p => {
-    const copy = {...p};
-    delete copy.awgVersion;
-    return copy;
-  });
+  config.proxies = state.proxies.map(stripProxyForExport);
 
-  // Rebuild proxy-providers: current state providers + preserved non-HTTP providers from original
+  // Rebuild proxy-providers: preserve non-HTTP from original + current state HTTP providers
   const originalProviders = state.importedRawConfig['proxy-providers'] || {};
   const newProviders = {};
-  // Keep non-HTTP providers from original
   for (const [name, pp] of Object.entries(originalProviders)) {
     if (pp.type !== 'http' || !pp.url) {
       newProviders[name] = structuredClone(pp);
     }
   }
-  // Add current state providers
-  for (const p of state.proxyProviders) {
-    newProviders[p.name] = {
-      type: 'http',
-      url: p.url,
-      interval: p.interval || 3600
-    };
-    if (p.filter) newProviders[p.name].filter = p.filter;
-    if (p['exclude-filter']) newProviders[p.name]['exclude-filter'] = p['exclude-filter'];
-  }
+  Object.assign(newProviders, buildHttpProxyProviders());
   if (Object.keys(newProviders).length) {
     config['proxy-providers'] = newProviders;
   } else {
     delete config['proxy-providers'];
   }
 
-  // Update the "Proxy" select group in proxy-groups with current proxy/provider names
-  // Preserve all other groups
+  // Update the "Proxy" select group; preserve all other groups
   if (Array.isArray(config['proxy-groups'])) {
     const proxyGroup = config['proxy-groups'].find(g => g.name === 'Proxy');
     if (proxyGroup) {
-      const proxyNames = state.proxies.map(p => p.name);
-      const providerNames = state.proxyProviders.map(p => p.name);
-      proxyGroup.proxies = [...proxyNames];
-      if (!providerNames.length) proxyGroup.proxies.push('DIRECT');
-      if (providerNames.length) {
-        proxyGroup.use = [...providerNames];
+      const updated = buildProxySelectGroup();
+      proxyGroup.proxies = updated.proxies;
+      if (updated.use) {
+        proxyGroup.use = updated.use;
       } else {
         delete proxyGroup.use;
       }
     }
   } else if (state.proxies.length || state.proxyProviders.length) {
-    const proxyNames = state.proxies.map(p => p.name);
-    const providerNames = state.proxyProviders.map(p => p.name);
-    const proxyGroup = { name: 'Proxy', type: 'select', proxies: [...proxyNames] };
-    if (!providerNames.length) proxyGroup.proxies.push('DIRECT');
-    if (providerNames.length) proxyGroup.use = [...providerNames];
-    config['proxy-groups'] = [proxyGroup];
+    config['proxy-groups'] = [buildProxySelectGroup()];
   }
 
-  // Rebuild rule-providers: preserve original ones + add/remove auto-generated ones
-  const geositeProvidersImported = [...new Set(
-    state.rules
-      .filter(r => r.type === 'RULE-SET' && r.payload.startsWith('geosite-'))
-      .map(r => r.payload)
-  )];
-  const autoGeneratedProviderNames = new Set();
-  // geosite providers
-  for (const name of geositeProvidersImported) autoGeneratedProviderNames.add(name);
-  // CDN providers
-  for (const id of state.activeCdnProviders) {
-    autoGeneratedProviderNames.add('cdn-' + id);
-  }
-  if (telegramEnabled) autoGeneratedProviderNames.add('telegram');
-  if (discordVoiceEnabled) autoGeneratedProviderNames.add('discord-voice');
-  if (ruBlockedEnabled) autoGeneratedProviderNames.add('ru-blocked');
-
+  // Rebuild rule-providers: preserve original non-auto ones + auto-generated
   const originalRuleProviders = state.importedRawConfig['rule-providers'] || {};
   const newRuleProviders = {};
-
-  // Preserved original rule-providers that aren't auto-generated types
   const knownAutoNames = new Set();
-  // Collect all possible auto-generated names
   for (const p of CDN_PROVIDERS) knownAutoNames.add('cdn-' + p.id);
   knownAutoNames.add('telegram');
   knownAutoNames.add('discord-voice');
@@ -672,41 +321,7 @@ function generateFromImported() {
       newRuleProviders[name] = structuredClone(rp);
     }
   }
-
-  // Add auto-generated rule-providers
-  for (const name of geositeProvidersImported) {
-    const siteName = name.slice('geosite-'.length);
-    newRuleProviders[name] = {
-      behavior: 'domain',
-      type: 'http',
-      url: `https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/${siteName}.yaml`,
-      interval: 86400
-    };
-  }
-  for (const id of state.activeCdnProviders) {
-    newRuleProviders['cdn-' + id] = {
-      behavior: 'ipcidr', type: 'http',
-      url: cdnProviderUrl(id), interval: 86400, format: 'text'
-    };
-  }
-  if (telegramEnabled) {
-    newRuleProviders.telegram = {
-      behavior: 'ipcidr', type: 'http',
-      url: telegramProviderUrl(), interval: 86400, format: 'text'
-    };
-  }
-  if (discordVoiceEnabled) {
-    newRuleProviders['discord-voice'] = {
-      behavior: 'ipcidr', type: 'http',
-      url: discordVoiceProviderUrl(), interval: 86400, format: 'text'
-    };
-  }
-  if (ruBlockedEnabled) {
-    newRuleProviders['ru-blocked'] = {
-      behavior: 'domain', type: 'http',
-      url: ruBlockedProviderUrl(), interval: 86400, format: 'text'
-    };
-  }
+  Object.assign(newRuleProviders, buildAutoRuleProviders());
 
   if (Object.keys(newRuleProviders).length) {
     config['rule-providers'] = newRuleProviders;
@@ -714,57 +329,17 @@ function generateFromImported() {
     delete config['rule-providers'];
   }
 
-  // Rebuild rules
-  const rules = [];
-  for (const r of state.rules) {
-    rules.push(`${r.type},${r.payload},${r.target}`);
-  }
-  if (state.matchTarget === 'Proxy') {
-    for (const r of PRIVATE_NETWORK_RULES) rules.push(r);
-  }
-  rules.push(`MATCH,${state.matchTarget}`);
-  config.rules = rules;
+  config.rules = buildRulesList();
 
-  // Handle sniffer skip-dst-address for telegram
   if (config.sniffer) {
-    if (telegramEnabled) {
+    if (flags.telegram) {
       config.sniffer['skip-dst-address'] = [...TELEGRAM_SNIFFER_SKIP_DST];
     } else {
       delete config.sniffer['skip-dst-address'];
     }
   }
 
-  const raw = jsyaml.dump(config, {
-    lineWidth: -1,
-    noRefs: true,
-    quotingType: '"',
-    forceQuotes: false
-  });
-
-  // Insert blank lines between top-level sections (multi-line blocks)
-  const lines = raw.split('\n');
-  const result = [];
-  let prevBlockWasMultiLine = false;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const isTopLevel = line.length > 0 && /^\S/.test(line);
-    if (isTopLevel && i > 0) {
-      // Check if the NEXT line after this top-level key is indented (making it a section start)
-      const nextIsChild = i + 1 < lines.length && /^[ -]/.test(lines[i + 1]);
-      // Add blank line if previous block had children OR this new key starts a section
-      if (prevBlockWasMultiLine || nextIsChild) {
-        if (result.length > 0 && result[result.length - 1] !== '') {
-          result.push('');
-        }
-      }
-    }
-    if (isTopLevel) {
-      // Determine if this top-level key has children
-      prevBlockWasMultiLine = i + 1 < lines.length && /^[ -]/.test(lines[i + 1]);
-    }
-    result.push(line);
-  }
-  return result.join('\n');
+  return dumpYamlConfig(config);
 }
 
 const DEVICES = {
@@ -876,7 +451,6 @@ function importConfig(yamlText) {
   if (Array.isArray(doc.proxies)) {
     state.proxies = doc.proxies.map(p => {
       const proxy = {...p};
-      // Ensure required fields
       if (!proxy.name) proxy.name = proxy.type + '-' + proxy.server;
       return proxy;
     });
@@ -922,7 +496,6 @@ function importConfig(yamlText) {
             target: parts.slice(2).join(',').trim()
           });
         } else {
-          // Two-part rule like MATCH,target (already handled above)
           state.rules.push({
             type: type,
             payload: parts[1].trim(),
@@ -933,24 +506,13 @@ function importConfig(yamlText) {
     }
   }
 
-  // Detect active presets
   detectActivePresets();
 
-  // Update UI
   document.getElementById('import-btn').style.display = 'none';
   document.getElementById('import-reset-btn').style.display = '';
 
-  renderDnsPresets('default');
-  renderDnsPresets('ns');
-  renderDnsList('default');
-  renderDnsList('ns');
-  renderProxies();
-  renderAllPresets();
-  renderRules();
-  renderTargetSelects();
-  updateFooterValidation();
+  renderAll();
 
-  // Set match target dropdown
   const matchEl = document.getElementById('match-target');
   if (matchEl) matchEl.value = state.matchTarget;
 }
@@ -961,31 +523,19 @@ function detectActivePresets() {
   state.activeOtherPresets = new Set();
   state.activeCdnProviders = new Set();
 
-  // Check service presets
-  for (const [id, preset] of Object.entries(SERVICE_PRESETS)) {
-    const allMatch = preset.rules.every(pr =>
-      state.rules.some(r => r.type === pr.type && r.payload === pr.payload && r.target === pr.target)
-    );
-    if (allMatch) state.activeServicePresets.add(id);
+  for (const [presets, activeSet] of [
+    [SERVICE_PRESETS, state.activeServicePresets],
+    [EXCEPTION_PRESETS, state.activeExceptionPresets],
+    [OTHER_PRESETS, state.activeOtherPresets]
+  ]) {
+    for (const [id, preset] of Object.entries(presets)) {
+      const allMatch = preset.rules.every(pr =>
+        state.rules.some(r => r.type === pr.type && r.payload === pr.payload && r.target === pr.target)
+      );
+      if (allMatch) activeSet.add(id);
+    }
   }
 
-  // Check exception presets
-  for (const [id, preset] of Object.entries(EXCEPTION_PRESETS)) {
-    const allMatch = preset.rules.every(pr =>
-      state.rules.some(r => r.type === pr.type && r.payload === pr.payload && r.target === pr.target)
-    );
-    if (allMatch) state.activeExceptionPresets.add(id);
-  }
-
-  // Check other presets
-  for (const [id, preset] of Object.entries(OTHER_PRESETS)) {
-    const allMatch = preset.rules.every(pr =>
-      state.rules.some(r => r.type === pr.type && r.payload === pr.payload && r.target === pr.target)
-    );
-    if (allMatch) state.activeOtherPresets.add(id);
-  }
-
-  // Check CDN providers
   for (const p of CDN_PROVIDERS) {
     if (state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'cdn-' + p.id)) {
       state.activeCdnProviders.add(p.id);
@@ -994,19 +544,11 @@ function detectActivePresets() {
 }
 
 function resetImport() {
-  state.importedRawConfig = null;
-  state.ipv6 = false;
-  state.dns.defaultNs = ['9.9.9.9', '149.112.112.112'];
-  state.dns.nameservers = ['https://dns.quad9.net/dns-query', 'tls://dns.quad9.net'];
-  state.proxies = [];
-  state.proxyProviders = [];
-  state.rules = [];
-  state.activeServicePresets = new Set();
-  state.activeExceptionPresets = new Set();
-  state.activeOtherPresets = new Set();
-  state.activeCdnProviders = new Set();
-  state.matchTarget = 'DIRECT';
-  state.device = 'desktop';
+  const lang = state.lang;
+  const step = state.step;
+  Object.assign(state, initialState());
+  state.lang = lang;
+  state.step = step;
 
   const toggle = document.getElementById('ipv6-toggle');
   if (toggle) toggle.value = 'false';
@@ -1014,15 +556,7 @@ function resetImport() {
   document.getElementById('import-btn').style.display = '';
   document.getElementById('import-reset-btn').style.display = 'none';
 
-  renderDnsPresets('default');
-  renderDnsPresets('ns');
-  renderDnsList('default');
-  renderDnsList('ns');
-  renderProxies();
-  renderAllPresets();
-  renderRules();
-  renderTargetSelects();
-  updateFooterValidation();
+  renderAll();
 }
 
 // ============================================================
