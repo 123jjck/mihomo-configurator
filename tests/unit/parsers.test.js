@@ -113,6 +113,23 @@ describe('proxy share-link parsers', () => {
     });
   });
 
+  it('drops xhttp download-settings for stream-one mode in vless share links', () => {
+    const extra = encodeURIComponent(JSON.stringify({
+      downloadSettings: {
+        address: 'download.example.com',
+        port: 8443,
+        security: 'tls'
+      }
+    }));
+
+    const proxy = app.parseVless(
+      `vless://22222222-2222-4222-8222-222222222222@xhttp.example.com:443?type=xhttp&security=tls&path=%2Fup&mode=stream-one&extra=${extra}#XHTTP`
+    );
+
+    expect(proxy['xhttp-opts'].mode).toBe('stream-one');
+    expect(proxy['xhttp-opts']['download-settings']).toBeUndefined();
+  });
+
   it('parses legacy vmess base64 JSON with websocket early data', () => {
     const payload = Buffer.from(JSON.stringify({
       ps: 'Legacy VMess',
