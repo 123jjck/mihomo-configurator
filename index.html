@@ -15,19 +15,19 @@
       </svg>
     </a>
     <div class="header-left">
-      <button class="btn btn-sm btn-outline import-btn" id="import-btn" onclick="document.getElementById('import-file').click()">Импортировать конфиг</button>
-      <button class="btn btn-sm btn-danger import-btn" id="import-reset-btn" onclick="resetImport()" style="display:none">Сбросить импорт</button>
+      <button class="btn btn-sm btn-outline import-btn" id="import-btn" data-i18n="importBtn" onclick="document.getElementById('import-file').click()">Импортировать конфиг</button>
+      <button class="btn btn-sm btn-danger import-btn" id="import-reset-btn" data-i18n="importResetBtn" onclick="resetImport()" style="display:none">Сбросить импорт</button>
       <input type="file" id="import-file" accept=".yaml,.yml,.txt" style="display:none" onchange="handleImportFile(this)">
     </div>
     <div class="lang-switch">
-      <label id="lang-switch-label" class="field-label" for="lang-switch">Язык</label>
+      <label id="lang-switch-label" class="field-label" for="lang-switch" data-i18n="languageLabel">Язык</label>
       <select class="field-input lang-select" id="lang-switch">
-        <option value="ru" id="lang-option-ru">Русский</option>
-        <option value="en" id="lang-option-en">English</option>
+        <option value="ru" id="lang-option-ru" data-i18n="languageRu">Русский</option>
+        <option value="en" id="lang-option-en" data-i18n="languageEn">English</option>
       </select>
     </div>
-    <h1 id="app-title">Mihomo Configurator</h1>
-    <p id="app-subtitle">Конструктор конфигурации <a href="https://github.com/MetaCubeX/mihomo" target="_blank">mihomo</a></p>
+    <h1 id="app-title" data-i18n="appTitle">Mihomo Configurator</h1>
+    <p id="app-subtitle" data-i18n-html="appSubtitleHtml">Конструктор конфигурации <a href="https://github.com/MetaCubeX/mihomo" target="_blank">mihomo</a></p>
   </header>
 
   <nav class="steps" id="steps-nav"></nav>
@@ -35,38 +35,38 @@
   <!-- Step 1: DNS -->
   <section class="step-content active" data-step="0">
     <div class="card">
-      <h2 id="dns-title">Настройка DNS</h2>
-      <p class="card-desc" id="dns-desc">Настройте DNS-серверы для резолвинга доменов</p>
-      <p class="hint" id="dns-main-hint">Не рекомендуется что-либо менять на этой странице, если вы не понимаете, что делаете.</p>
+      <h2 id="dns-title" data-i18n="dnsTitle">Настройка DNS</h2>
+      <p class="card-desc" id="dns-desc" data-i18n="dnsDesc">Настройте DNS-серверы для резолвинга доменов</p>
+      <p class="hint" id="dns-main-hint" data-i18n="dnsMainHint">Не рекомендуется что-либо менять на этой странице, если вы не понимаете, что делаете.</p>
       <!-- IPv6 toggle hidden intentionally (advanced setting). -->
       <div class="field ipv6-field">
-        <label class="field-label" id="ipv6-label">IPv6</label>
+        <label class="field-label" id="ipv6-label" data-i18n="ipv6Label">IPv6</label>
         <select class="field-input" id="ipv6-toggle" onchange="state.ipv6=this.value==='true'" style="max-width:200px">
-          <option value="false" id="ipv6-off">Отключён</option>
-          <option value="true" id="ipv6-on">Включён</option>
+          <option value="false" id="ipv6-off" data-i18n="ipv6Disabled">Отключён</option>
+          <option value="true" id="ipv6-on" data-i18n="ipv6Enabled">Включён</option>
         </select>
       </div>
     </div>
 
     <div class="card">
-      <h3 id="dns-default-title">Default Nameservers</h3>
-      <p class="hint" id="dns-default-hint">DNS-серверы (IP), через которые резолвятся адреса основных nameserver</p>
+      <h3 id="dns-default-title" data-i18n="dnsDefaultTitle">Default Nameservers</h3>
+      <p class="hint" id="dns-default-hint" data-i18n="dnsDefaultHint">DNS-серверы (IP), через которые резолвятся адреса основных nameserver</p>
       <div class="presets" id="dns-default-presets"></div>
       <div id="dns-default-list"></div>
       <div class="add-row">
         <input class="field-input" id="dns-default-input" placeholder="9.9.9.9" onkeydown="if(event.key==='Enter')addDnsServer('default')">
-        <button class="btn btn-sm btn-primary" id="dns-default-add-btn" onclick="addDnsServer('default')">Добавить</button>
+        <button class="btn btn-sm btn-primary" id="dns-default-add-btn" data-i18n="dnsDefaultAdd" onclick="addDnsServer('default')">Добавить</button>
       </div>
     </div>
 
     <div class="card">
-      <h3 id="dns-ns-title">Nameservers</h3>
-      <p class="hint" id="dns-ns-hint">Основные DNS-серверы (DoH / DoT) для резолвинга доменов</p>
+      <h3 id="dns-ns-title" data-i18n="dnsNsTitle">Nameservers</h3>
+      <p class="hint" id="dns-ns-hint" data-i18n="dnsNsHint">Основные DNS-серверы (DoH / DoT) для резолвинга доменов</p>
       <div class="presets" id="dns-ns-presets"></div>
       <div id="dns-ns-list"></div>
       <div class="add-row">
         <input class="field-input" id="dns-ns-input" placeholder="https://dns.quad9.net/dns-query" onkeydown="if(event.key==='Enter')addDnsServer('ns')">
-        <button class="btn btn-sm btn-primary" id="dns-ns-add-btn" onclick="addDnsServer('ns')">Добавить</button>
+        <button class="btn btn-sm btn-primary" id="dns-ns-add-btn" data-i18n="dnsNsAdd" onclick="addDnsServer('ns')">Добавить</button>
       </div>
     </div>
   </section>
@@ -74,23 +74,23 @@
   <!-- Step 2: Servers -->
   <section class="step-content" data-step="1">
     <div class="card">
-      <h2 id="servers-title">Добавление серверов</h2>
-      <p class="card-desc" id="servers-desc">Добавьте прокси-серверы из ссылок или файлов конфигурации</p>
-      <p class="hint" id="servers-hint">Все данные обрабатываются локально в вашем браузере и никуда не передаются.</p>
+      <h2 id="servers-title" data-i18n="serversTitle">Добавление серверов</h2>
+      <p class="card-desc" id="servers-desc" data-i18n="serversDesc">Добавьте прокси-серверы из ссылок или файлов конфигурации</p>
+      <p class="hint" id="servers-hint" data-i18n="serversHint">Все данные обрабатываются локально в вашем браузере и никуда не передаются.</p>
     </div>
 
     <div class="card">
-      <h3 id="links-title">Из ссылок</h3>
-      <p class="hint" id="links-hint">Вставьте ссылки по одной на строку: vless://, vmess://, ss://, trojan://, hysteria2://, hy2://, tuic:// или URL подписки https://...</p>
+      <h3 id="links-title" data-i18n="linksTitle">Из ссылок</h3>
+      <p class="hint" id="links-hint" data-i18n="linksHint">Вставьте ссылки по одной на строку: vless://, vmess://, ss://, trojan://, hysteria2://, hy2://, tuic:// или URL подписки https://...</p>
       <textarea class="field-input" id="proxy-urls" rows="5" placeholder="vless://uuid@server:443?type=tcp&security=reality&...#Name&#10;hysteria2://password@server:443?...#Name"></textarea>
       <div style="margin-top:10px">
-        <button class="btn btn-primary" id="links-add-btn" onclick="addProxiesFromUrls()">Добавить из ссылок</button>
+        <button class="btn btn-primary" id="links-add-btn" data-i18n="linksAdd" onclick="addProxiesFromUrls()">Добавить из ссылок</button>
       </div>
     </div>
 
     <div class="card">
-      <h3 id="file-title">Из файла (WireGuard / AmneziaWG)</h3>
-      <p class="hint" id="file-hint">Загрузите .conf файл. AmneziaWG определяется автоматически.</p>
+      <h3 id="file-title" data-i18n="fileTitle">Из файла (WireGuard / AmneziaWG)</h3>
+      <p class="hint" id="file-hint" data-i18n="fileHint">Загрузите .conf файл. AmneziaWG определяется автоматически.</p>
       <div class="file-input-wrap">
         <input type="file" id="wg-file" accept=".conf,.txt" onchange="addProxyFromFile(this)">
       </div>
@@ -99,11 +99,11 @@
     <div class="card" id="proxy-list-card" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <h3 id="proxy-list-title" style="margin:0">Добавленные серверы и подписки (0)</h3>
-        <button class="btn btn-sm btn-danger" id="proxy-clear-btn" onclick="clearProxies()">Очистить все</button>
+        <button class="btn btn-sm btn-danger" id="proxy-clear-btn" data-i18n="proxyClear" onclick="clearProxies()">Очистить все</button>
       </div>
       <div style="overflow-x:auto">
         <table class="proxy-table">
-          <thead><tr><th id="proxy-th-name">Имя</th><th id="proxy-th-type">Тип</th><th id="proxy-th-server">Сервер</th><th id="proxy-th-port">Порт</th><th></th></tr></thead>
+          <thead><tr><th id="proxy-th-name" data-i18n="proxyThName">Имя</th><th id="proxy-th-type" data-i18n="proxyThType">Тип</th><th id="proxy-th-server" data-i18n="proxyThServer">Сервер</th><th id="proxy-th-port" data-i18n="proxyThPort">Порт</th><th></th></tr></thead>
           <tbody id="proxy-tbody"></tbody>
         </table>
       </div>
@@ -113,26 +113,26 @@
   <!-- Step 3: Rules -->
   <section class="step-content" data-step="2">
     <div class="card">
-      <h2 id="rules-title">Правила маршрутизации</h2>
-      <p class="card-desc" id="rules-desc">Настройте, какой трафик проксировать, а какой направлять напрямую</p>
+      <h2 id="rules-title" data-i18n="rulesTitle">Правила маршрутизации</h2>
+      <p class="card-desc" id="rules-desc" data-i18n="rulesDesc">Настройте, какой трафик проксировать, а какой направлять напрямую</p>
 
-      <h3 id="rules-services-title">Популярные сервисы</h3>
+      <h3 id="rules-services-title" data-i18n="rulesServicesTitle">Популярные сервисы</h3>
       <div class="presets" id="presets-services"></div>
 
-      <h3 id="rules-cdn-title" style="margin-top:16px">CDN</h3>
-      <p class="hint" id="rules-cdn-hint">IP-диапазоны CDN-провайдеров для проксирования</p>
+      <h3 id="rules-cdn-title" style="margin-top:16px" data-i18n="rulesCdnTitle">CDN</h3>
+      <p class="hint" id="rules-cdn-hint" data-i18n="rulesCdnHint">IP-диапазоны CDN-провайдеров для проксирования</p>
       <div class="presets" id="presets-cdn"></div>
 
-      <h3 id="rules-exceptions-title" style="margin-top:16px">Исключения</h3>
-      <p class="hint" id="rules-exceptions-hint">Используйте при проксировании CDN: адреса этих сервисов могут пересекаться с диапазонами CDN, хотя сами сервисы не заблокированы и доступны напрямую.</p>
+      <h3 id="rules-exceptions-title" style="margin-top:16px" data-i18n="rulesExceptionsTitle">Исключения</h3>
+      <p class="hint" id="rules-exceptions-hint" data-i18n="rulesExceptionsHint">Используйте при проксировании CDN: адреса этих сервисов могут пересекаться с диапазонами CDN, хотя сами сервисы не заблокированы и доступны напрямую.</p>
       <div class="presets" id="presets-exceptions"></div>
 
-      <h3 id="rules-other-title" style="margin-top:16px">Прочее</h3>
+      <h3 id="rules-other-title" style="margin-top:16px" data-i18n="rulesOtherTitle">Прочее</h3>
       <div class="presets" id="presets-other"></div>
     </div>
 
     <div class="card">
-      <h3 id="rule-manual-title">Добавить правило вручную</h3>
+      <h3 id="rule-manual-title" data-i18n="ruleManualTitle">Добавить правило вручную</h3>
       <div class="rule-form">
         <select class="field-input" id="rule-type">
           <option value="DOMAIN-SUFFIX">DOMAIN-SUFFIX</option>
@@ -146,15 +146,15 @@
         </select>
         <input class="field-input" id="rule-payload" placeholder="google.com" onkeydown="if(event.key==='Enter')addRule()">
         <select class="field-input" id="rule-target"></select>
-        <button class="btn btn-primary" id="rule-add-btn" onclick="addRule()">Добавить</button>
+        <button class="btn btn-primary" id="rule-add-btn" data-i18n="ruleAddBtn" onclick="addRule()">Добавить</button>
       </div>
     </div>
 
     <div class="card">
-      <h3 id="rules-current-title">Текущие правила</h3>
+      <h3 id="rules-current-title" data-i18n="rulesCurrentTitle">Текущие правила</h3>
       <div id="rules-list"></div>
       <div class="match-rule">
-        <span id="match-label">Остальной трафик (MATCH) &rarr;</span>
+        <span id="match-label" data-i18n="matchLabel">Остальной трафик (MATCH) &rarr;</span>
         <select class="field-input" id="match-target" onchange="state.matchTarget=this.value"></select>
       </div>
     </div>
@@ -163,23 +163,23 @@
   <!-- Step 4: Download -->
   <section class="step-content" data-step="3">
     <div class="card">
-      <h2 id="download-title">Скачивание конфига</h2>
-      <p class="card-desc" id="download-desc">Выберите устройство и скачайте файл конфигурации</p>
-      <h3 id="device-title">Устройство</h3>
+      <h2 id="download-title" data-i18n="downloadTitle">Скачивание конфига</h2>
+      <p class="card-desc" id="download-desc" data-i18n="downloadDesc">Выберите устройство и скачайте файл конфигурации</p>
+      <h3 id="device-title" data-i18n="deviceTitle">Устройство</h3>
       <div class="presets" id="device-presets"></div>
       <p class="hint" id="device-hint"></p>
     </div>
 
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <h3 id="preview-title" style="margin:0">Предпросмотр</h3>
-        <button class="btn btn-sm btn-outline" id="copy-btn" onclick="copyConfig()">Копировать</button>
+        <h3 id="preview-title" style="margin:0" data-i18n="previewTitle">Предпросмотр</h3>
+        <button class="btn btn-sm btn-outline" id="copy-btn" data-i18n="copyBtn" onclick="copyConfig()">Копировать</button>
       </div>
       <pre class="preview" id="config-preview"></pre>
     </div>
 
     <div style="text-align:center;padding:12px 0">
-      <button class="btn btn-lg btn-success" id="download-btn" onclick="downloadConfig()">Скачать config.yaml</button>
+      <button class="btn btn-lg btn-success" id="download-btn" data-i18n="downloadBtn" onclick="downloadConfig()">Скачать config.yaml</button>
     </div>
   </section>
 
@@ -195,37 +195,37 @@
 
 <div class="modal" id="subscription-modal" onclick="if(event.target===this)closeSubscriptionEditor()">
   <div class="modal-card">
-    <h3 id="sub-modal-title">Параметры подписки</h3>
-    <p class="hint"><span id="subscription-edit-label">Подписка:</span> <span id="subscription-edit-name"></span></p>
+    <h3 id="sub-modal-title" data-i18n="subModalTitle">Параметры подписки</h3>
+    <p class="hint"><span id="subscription-edit-label" data-i18n="subEditLabel">Подписка:</span> <span id="subscription-edit-name"></span></p>
     <input type="hidden" id="subscription-edit-index">
     <div class="field">
-      <label class="field-label" id="sub-filter-label" for="subscription-edit-filter">Добавить сервера со словами в названии:</label>
+      <label class="field-label" id="sub-filter-label" for="subscription-edit-filter" data-i18n="subFilterLabel">Добавить сервера со словами в названии:</label>
       <input class="field-input" id="subscription-edit-filter" placeholder="^(HK|SG)|🇭🇰|🇸🇬">
     </div>
     <div class="field">
-      <label class="field-label" id="sub-exclude-label" for="subscription-edit-exclude-filter">Исключить сервера со словами в названии:</label>
+      <label class="field-label" id="sub-exclude-label" for="subscription-edit-exclude-filter" data-i18n="subExcludeLabel">Исключить сервера со словами в названии:</label>
       <input class="field-input" id="subscription-edit-exclude-filter" placeholder="(?i)expire|test|trial">
     </div>
     <div class="modal-actions">
-      <button class="btn btn-outline" id="sub-cancel-btn" onclick="closeSubscriptionEditor()">Отмена</button>
-      <button class="btn btn-primary" id="sub-save-btn" onclick="saveSubscriptionEditor()">Сохранить</button>
+      <button class="btn btn-outline" id="sub-cancel-btn" data-i18n="cancelBtn" onclick="closeSubscriptionEditor()">Отмена</button>
+      <button class="btn btn-primary" id="sub-save-btn" data-i18n="saveBtn" onclick="saveSubscriptionEditor()">Сохранить</button>
     </div>
   </div>
 </div>
 
 <div class="modal" id="proxy-modal" onclick="if(event.target===this)closeProxyEditor()">
   <div class="modal-card">
-    <h3 id="proxy-modal-title">Параметры сервера</h3>
-    <p class="hint"><span id="proxy-edit-label">Сервер:</span> <span id="proxy-edit-name"></span></p>
+    <h3 id="proxy-modal-title" data-i18n="proxyModalTitle">Параметры сервера</h3>
+    <p class="hint"><span id="proxy-edit-label" data-i18n="proxyEditLabel">Сервер:</span> <span id="proxy-edit-name"></span></p>
     <input type="hidden" id="proxy-edit-index">
     <div class="field">
-      <label class="field-label" id="dialer-proxy-label" for="proxy-edit-dialer-proxy">Подключаться через другой сервер</label>
+      <label class="field-label" id="dialer-proxy-label" for="proxy-edit-dialer-proxy" data-i18n="dialerProxyLabel">Подключаться через другой сервер</label>
       <select class="field-input" id="proxy-edit-dialer-proxy"></select>
-      <p class="hint field-hint" id="dialer-proxy-hint">Выбранный сервер будет использоваться для подключения к этому серверу.</p>
+      <p class="hint field-hint" id="dialer-proxy-hint" data-i18n="dialerProxyHint">Выбранный сервер будет использоваться для подключения к этому серверу.</p>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-outline" id="proxy-cancel-btn" onclick="closeProxyEditor()">Отмена</button>
-      <button class="btn btn-primary" id="proxy-save-btn" onclick="saveProxyEditor()">Сохранить</button>
+      <button class="btn btn-outline" id="proxy-cancel-btn" data-i18n="cancelBtn" onclick="closeProxyEditor()">Отмена</button>
+      <button class="btn btn-primary" id="proxy-save-btn" data-i18n="saveBtn" onclick="saveProxyEditor()">Сохранить</button>
     </div>
   </div>
 </div>

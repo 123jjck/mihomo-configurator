@@ -173,11 +173,19 @@ describe('mihomo YAML generation', () => {
     expect(doc.rules).toContain(`RULE-SET,${providerName},DIRECT`);
   });
 
-  it('quotes YAML scalars that could otherwise be parsed as booleans, numbers, or syntax', () => {
-    expect(app.q('true')).toBe('"true"');
-    expect(app.q('1')).toBe('"1"');
-    expect(app.q('value:with:colon')).toBe('"value:with:colon"');
-    expect(app.q('plain-value')).toBe('plain-value');
+  it('serializes tricky proxy names safely via js-yaml dump/load roundtrip', async () => {
+    app.state.proxies = [
+      await app.parseProxyUrl('ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpzZWNyZXQ@ss.example.com:8388#true'),
+      await app.parseProxyUrl('ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpzZWNyZXQ@ss2.example.com:8388#1'),
+      await app.parseProxyUrl('ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpzZWNyZXQ@ss3.example.com:8388#value:with:colon')
+    ];
+    // Force distinct names that stress YAML scalar rules
+    app.state.proxies[0].name = 'true';
+    app.state.proxies[1].name = '1';
+    app.state.proxies[2].name = 'value:with:colon';
+
+    const doc = yaml.load(app.generateConfig());
+    expect(doc.proxies.map(p => p.name)).toEqual(['true', '1', 'value:with:colon']);
   });
 
   it('imports existing YAML, preserves non-generated providers, and regenerates editable sections', async () => {

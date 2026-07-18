@@ -1,25 +1,29 @@
 // ============================================================
 // State
 // ============================================================
-const state = {
-  step: 0,
-  ipv6: false,
-  dns: {
-    defaultNs: ['9.9.9.9', '149.112.112.112'],
-    nameservers: ['https://dns.quad9.net/dns-query', 'tls://dns.quad9.net']
-  },
-  proxies: [],
-  proxyProviders: [],
-  rules: [],
-  activeServicePresets: new Set(),
-  activeExceptionPresets: new Set(),
-  activeOtherPresets: new Set(),
-  activeCdnProviders: new Set(),
-  matchTarget: 'DIRECT',
-  device: 'desktop',
-  lang: 'ru',
-  importedRawConfig: null
-};
+function initialState() {
+  return {
+    step: 0,
+    ipv6: false,
+    dns: {
+      defaultNs: ['9.9.9.9', '149.112.112.112'],
+      nameservers: ['https://dns.quad9.net/dns-query', 'tls://dns.quad9.net']
+    },
+    proxies: [],
+    proxyProviders: [],
+    rules: [],
+    activeServicePresets: new Set(),
+    activeExceptionPresets: new Set(),
+    activeOtherPresets: new Set(),
+    activeCdnProviders: new Set(),
+    matchTarget: 'DIRECT',
+    device: 'desktop',
+    lang: 'ru',
+    importedRawConfig: null
+  };
+}
+
+const state = initialState();
 
 const SUPPORTED_LANGS = ['ru', 'en'];
 const I18N = {
@@ -259,21 +263,6 @@ function t(key, vars = {}) {
   return formatText(raw !== undefined ? raw : key, vars);
 }
 
-function setText(id, key, vars = {}) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = t(key, vars);
-}
-
-function setHtml(id, key, vars = {}) {
-  const el = document.getElementById(id);
-  if (el) el.innerHTML = t(key, vars);
-}
-
-function setPlaceholder(id, key) {
-  const el = document.getElementById(id);
-  if (el) el.placeholder = t(key);
-}
-
 function getSteps() {
   return (I18N[state.lang] || I18N.ru).steps;
 }
@@ -281,68 +270,15 @@ function getSteps() {
 function localizeStaticUI() {
   document.documentElement.lang = state.lang;
   document.title = t('appTitle');
-  setText('app-title', 'appTitle');
-  setHtml('app-subtitle', 'appSubtitleHtml');
-  setText('lang-switch-label', 'languageLabel');
-  setText('lang-option-ru', 'languageRu');
-  setText('lang-option-en', 'languageEn');
-  setText('dns-title', 'dnsTitle');
-  setText('dns-desc', 'dnsDesc');
-  setText('dns-main-hint', 'dnsMainHint');
-  setText('ipv6-label', 'ipv6Label');
-  setText('ipv6-off', 'ipv6Disabled');
-  setText('ipv6-on', 'ipv6Enabled');
-  setText('dns-default-title', 'dnsDefaultTitle');
-  setText('dns-default-hint', 'dnsDefaultHint');
-  setText('dns-default-add-btn', 'dnsDefaultAdd');
-  setText('dns-ns-title', 'dnsNsTitle');
-  setText('dns-ns-hint', 'dnsNsHint');
-  setText('dns-ns-add-btn', 'dnsNsAdd');
-  setText('servers-title', 'serversTitle');
-  setText('servers-desc', 'serversDesc');
-  setText('servers-hint', 'serversHint');
-  setText('links-title', 'linksTitle');
-  setText('links-hint', 'linksHint');
-  setText('links-add-btn', 'linksAdd');
-  setText('file-title', 'fileTitle');
-  setText('file-hint', 'fileHint');
-  setText('proxy-clear-btn', 'proxyClear');
-  setText('proxy-th-name', 'proxyThName');
-  setText('proxy-th-type', 'proxyThType');
-  setText('proxy-th-server', 'proxyThServer');
-  setText('proxy-th-port', 'proxyThPort');
-  setText('rules-title', 'rulesTitle');
-  setText('rules-desc', 'rulesDesc');
-  setText('rules-services-title', 'rulesServicesTitle');
-  setText('rules-cdn-title', 'rulesCdnTitle');
-  setText('rules-cdn-hint', 'rulesCdnHint');
-  setText('rules-exceptions-title', 'rulesExceptionsTitle');
-  setText('rules-exceptions-hint', 'rulesExceptionsHint');
-  setText('rules-other-title', 'rulesOtherTitle');
-  setText('rule-manual-title', 'ruleManualTitle');
-  setText('rule-add-btn', 'ruleAddBtn');
-  setText('rules-current-title', 'rulesCurrentTitle');
-  setText('match-label', 'matchLabel');
-  setText('download-title', 'downloadTitle');
-  setText('download-desc', 'downloadDesc');
-  setText('device-title', 'deviceTitle');
-  setText('preview-title', 'previewTitle');
-  setText('copy-btn', 'copyBtn');
-  setText('download-btn', 'downloadBtn');
-  setText('sub-modal-title', 'subModalTitle');
-  setText('subscription-edit-label', 'subEditLabel');
-  setText('sub-filter-label', 'subFilterLabel');
-  setText('sub-exclude-label', 'subExcludeLabel');
-  setText('sub-cancel-btn', 'cancelBtn');
-  setText('sub-save-btn', 'saveBtn');
-  setText('proxy-modal-title', 'proxyModalTitle');
-  setText('proxy-edit-label', 'proxyEditLabel');
-  setText('dialer-proxy-label', 'dialerProxyLabel');
-  setText('dialer-proxy-hint', 'dialerProxyHint');
-  setText('proxy-cancel-btn', 'cancelBtn');
-  setText('proxy-save-btn', 'saveBtn');
-  setText('import-btn', 'importBtn');
-  setText('import-reset-btn', 'importResetBtn');
+
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => {
+    el.innerHTML = t(el.getAttribute('data-i18n-html'));
+  });
+
+  // Nav buttons keep directional arrows around the translated label
   const prevBtn = document.getElementById('btn-prev');
   if (prevBtn) prevBtn.textContent = `\u2190 ${t('prevBtn')}`;
   const nextBtn = document.getElementById('btn-next');
@@ -358,18 +294,7 @@ function setLanguage(lang, persist = true) {
   const switcher = document.getElementById('lang-switch');
   if (switcher) switcher.value = normalized;
   localizeStaticUI();
-  renderSteps();
-  renderDnsPresets('default');
-  renderDnsPresets('ns');
-  renderDnsList('default');
-  renderDnsList('ns');
-  renderProxies();
-  renderAllPresets();
-  renderRules();
-  renderTargetSelects();
-  renderDevices();
-  updateFooterValidation();
-  if (state.step === getSteps().length - 1) renderPreview();
+  renderAll({ includeDevices: true, includePreview: state.step === getSteps().length - 1 });
 }
 
 // ============================================================
