@@ -402,14 +402,22 @@ function renderAllPresets() {
     `<button class="preset-btn ${state.activeCdnProviders.has(p.id)?'active':''}" onclick="toggleCdn('${p.id}')">${escHtml(labelOf(p))}</button>`
   ).join('');
 
+  document.getElementById('presets-exceptions').innerHTML = Object.entries(EXCEPTION_PRESETS).map(([id, p]) =>
+    `<button class="preset-btn ${state.activeExceptionPresets.has(id)?'active':''}" onclick="togglePreset('exceptions','${id}')">${escHtml(labelOf(p))}</button>`
+  ).join('');
+
   document.getElementById('presets-other').innerHTML = Object.entries(OTHER_PRESETS).map(([id, p]) =>
     `<button class="preset-btn ${state.activeOtherPresets.has(id)?'active':''}" onclick="togglePreset('other','${id}')">${escHtml(labelOf(p))}</button>`
   ).join('');
 }
 
 function togglePreset(category, id) {
-  const presets = category === 'services' ? SERVICE_PRESETS : OTHER_PRESETS;
-  const activeSet = category === 'services' ? state.activeServicePresets : state.activeOtherPresets;
+  const categoryConfig = {
+    services: [SERVICE_PRESETS, state.activeServicePresets],
+    exceptions: [EXCEPTION_PRESETS, state.activeExceptionPresets],
+    other: [OTHER_PRESETS, state.activeOtherPresets]
+  };
+  const [presets, activeSet] = categoryConfig[category];
 
   if (activeSet.has(id)) {
     activeSet.delete(id);
@@ -421,7 +429,9 @@ function togglePreset(category, id) {
     activeSet.add(id);
     for (const r of presets[id].rules) {
       if (!state.rules.some(er => er.type === r.type && er.payload === r.payload)) {
-        state.rules.push({...r});
+        const firstCdnRule = state.rules.findIndex(rule => rule.type === 'RULE-SET' && rule.payload.startsWith('cdn-'));
+        if (category === 'exceptions' && firstCdnRule !== -1) state.rules.splice(firstCdnRule, 0, {...r});
+        else state.rules.push({...r});
       }
     }
   }

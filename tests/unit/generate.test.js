@@ -154,6 +154,25 @@ describe('mihomo YAML generation', () => {
     );
   });
 
+  it.each([
+    ['steam', 'geosite-steam', 'steam'],
+    ['mihoyo', 'geosite-mihoyo', 'mihoyo'],
+    ['kurogames', 'geosite-kurogames', 'kurogames'],
+    ['twitch', 'geosite-twitch', 'twitch']
+  ])('adds the %s CDN exception as a direct geosite provider', (presetId, providerName, siteName) => {
+    app.togglePreset('exceptions', presetId);
+
+    const doc = yaml.load(app.generateConfig());
+
+    expect(doc['rule-providers'][providerName]).toEqual({
+      behavior: 'domain',
+      type: 'http',
+      url: `https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/${siteName}.yaml`,
+      interval: 86400
+    });
+    expect(doc.rules).toContain(`RULE-SET,${providerName},DIRECT`);
+  });
+
   it('quotes YAML scalars that could otherwise be parsed as booleans, numbers, or syntax', () => {
     expect(app.q('true')).toBe('"true"');
     expect(app.q('1')).toBe('"1"');

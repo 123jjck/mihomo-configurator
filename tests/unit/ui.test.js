@@ -50,6 +50,27 @@ describe('UI state helpers', () => {
     expect(app.SERVICE_PRESETS.roblox).toBeUndefined();
   });
 
+  it('renders CDN exceptions and keeps RU direct last in the other presets', () => {
+    app.setLanguage('ru', false);
+
+    const exceptionLabels = [...ctx.document.querySelectorAll('#presets-exceptions button')].map(button => button.textContent);
+    const otherLabels = [...ctx.document.querySelectorAll('#presets-other button')].map(button => button.textContent);
+
+    expect(exceptionLabels).toEqual(['Steam', 'miHoYo', 'Kuro Games (Wuthering Waves)', 'Twitch']);
+    expect(otherLabels).toEqual(['Заблокированные сайты', 'RU трафик напрямую']);
+    expect(ctx.document.getElementById('rules-exceptions-hint').textContent).toContain('проксировании CDN');
+  });
+
+  it('places a selected exception before existing CDN rules', () => {
+    app.toggleCdn('cloudflare');
+    app.togglePreset('exceptions', 'steam');
+
+    expect(app.state.rules).toEqual([
+      { type: 'RULE-SET', payload: 'geosite-steam', target: 'DIRECT' },
+      { type: 'RULE-SET', payload: 'cdn-cloudflare', target: 'Proxy' }
+    ]);
+  });
+
   it('prioritizes Telegram rule rendering before other rules for stable sniffing config', () => {
     app.state.rules = [
       { type: 'DOMAIN-SUFFIX', payload: 'example.com', target: 'DIRECT' },

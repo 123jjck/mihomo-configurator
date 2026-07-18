@@ -957,6 +957,7 @@ function importConfig(yamlText) {
 
 function detectActivePresets() {
   state.activeServicePresets = new Set();
+  state.activeExceptionPresets = new Set();
   state.activeOtherPresets = new Set();
   state.activeCdnProviders = new Set();
 
@@ -966,6 +967,14 @@ function detectActivePresets() {
       state.rules.some(r => r.type === pr.type && r.payload === pr.payload && r.target === pr.target)
     );
     if (allMatch) state.activeServicePresets.add(id);
+  }
+
+  // Check exception presets
+  for (const [id, preset] of Object.entries(EXCEPTION_PRESETS)) {
+    const allMatch = preset.rules.every(pr =>
+      state.rules.some(r => r.type === pr.type && r.payload === pr.payload && r.target === pr.target)
+    );
+    if (allMatch) state.activeExceptionPresets.add(id);
   }
 
   // Check other presets
@@ -993,6 +1002,7 @@ function resetImport() {
   state.proxyProviders = [];
   state.rules = [];
   state.activeServicePresets = new Set();
+  state.activeExceptionPresets = new Set();
   state.activeOtherPresets = new Set();
   state.activeCdnProviders = new Set();
   state.matchTarget = 'DIRECT';

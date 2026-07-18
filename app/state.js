@@ -12,6 +12,7 @@ const state = {
   proxyProviders: [],
   rules: [],
   activeServicePresets: new Set(),
+  activeExceptionPresets: new Set(),
   activeOtherPresets: new Set(),
   activeCdnProviders: new Set(),
   matchTarget: 'DIRECT',
@@ -60,6 +61,8 @@ const I18N = {
     rulesServicesTitle: 'Популярные сервисы',
     rulesCdnTitle: 'CDN',
     rulesCdnHint: 'IP-диапазоны CDN-провайдеров для проксирования',
+    rulesExceptionsTitle: 'Исключения',
+    rulesExceptionsHint: 'Используйте при проксировании CDN: адреса этих сервисов могут пересекаться с диапазонами CDN, хотя сами сервисы не заблокированы и доступны напрямую.',
     rulesOtherTitle: 'Прочее',
     ruleManualTitle: 'Добавить правило вручную',
     ruleAddBtn: 'Добавить',
@@ -165,6 +168,8 @@ const I18N = {
     rulesServicesTitle: 'Popular Services',
     rulesCdnTitle: 'CDN',
     rulesCdnHint: 'CDN IP ranges for proxy routing',
+    rulesExceptionsTitle: 'Exceptions',
+    rulesExceptionsHint: 'Use with CDN proxying: these services may share address ranges with CDNs, although they may not be blocked in your region.',
     rulesOtherTitle: 'Other',
     ruleManualTitle: 'Add Rule Manually',
     ruleAddBtn: 'Add',
@@ -311,6 +316,8 @@ function localizeStaticUI() {
   setText('rules-services-title', 'rulesServicesTitle');
   setText('rules-cdn-title', 'rulesCdnTitle');
   setText('rules-cdn-hint', 'rulesCdnHint');
+  setText('rules-exceptions-title', 'rulesExceptionsTitle');
+  setText('rules-exceptions-hint', 'rulesExceptionsHint');
   setText('rules-other-title', 'rulesOtherTitle');
   setText('rule-manual-title', 'ruleManualTitle');
   setText('rule-add-btn', 'ruleAddBtn');
@@ -400,8 +407,15 @@ const SERVICE_PRESETS = {
 };
 
 const OTHER_PRESETS = {
-  directRU:  { labelKey: 'presetDirectRu', rules: [{type:'GEOIP',payload:'RU',target:'DIRECT'}] },
-  ruBlocked: { labelKey: 'presetRuBlocked', rules: [{type:'RULE-SET',payload:'ru-blocked',target:'Proxy'}] }
+  ruBlocked: { labelKey: 'presetRuBlocked', rules: [{type:'RULE-SET',payload:'ru-blocked',target:'Proxy'}] },
+  directRU:  { labelKey: 'presetDirectRu', rules: [{type:'GEOIP',payload:'RU',target:'DIRECT'}] }
+};
+
+const EXCEPTION_PRESETS = {
+  steam:     { label: 'Steam', rules: [{type:'RULE-SET',payload:'geosite-steam',target:'DIRECT'}] },
+  mihoyo:    { label: 'miHoYo', rules: [{type:'RULE-SET',payload:'geosite-mihoyo',target:'DIRECT'}] },
+  kurogames: { label: 'Kuro Games (Wuthering Waves)', rules: [{type:'RULE-SET',payload:'geosite-kurogames',target:'DIRECT'}] },
+  twitch:    { label: 'Twitch', rules: [{type:'RULE-SET',payload:'geosite-twitch',target:'DIRECT'}] }
 };
 
 const CDN_PROVIDERS = [
