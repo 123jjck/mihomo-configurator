@@ -31,34 +31,88 @@ describe('UI state helpers', () => {
     expect(app.validateStep(1)).toBe('');
   });
 
-  it('keeps CDN all-provider mutually exclusive with individual CDN providers', () => {
+  it('uses individual CDN rules when partially selected and cdn-all when fully selected', () => {
     app.toggleCdn('cloudflare');
     app.toggleCdn('aws');
 
     expect([...app.state.activeCdnProviders].sort()).toEqual(['aws', 'cloudflare']);
     expect(app.state.rules.map(rule => rule.payload).sort()).toEqual(['cdn-aws', 'cdn-cloudflare']);
 
-    app.toggleCdn('all');
+    app.toggleCdn('cloudflare');
+    expect([...app.state.activeCdnProviders]).toEqual(['aws']);
 
+    app.togglePresetGroup('services', 'cdn');
     expect([...app.state.activeCdnProviders]).toEqual(['all']);
     expect(app.state.rules.map(rule => rule.payload)).toEqual(['cdn-all']);
+
+    app.toggleCdn('cloudflare');
+    expect(app.state.activeCdnProviders.has('all')).toBe(false);
+    expect(app.state.activeCdnProviders.has('cloudflare')).toBe(false);
+    expect(app.state.activeCdnProviders.size).toBe(app.CDN_PROVIDERS.length - 1);
+    expect(app.state.rules.some(r => r.payload === 'cdn-all')).toBe(false);
   });
 
   it('exposes BunnyCDN and the updated popular service list', () => {
     expect(app.CDN_PROVIDERS).toContainEqual({ id: 'bunny', label: 'BunnyCDN' });
-    expect(app.SERVICE_PRESETS.twitter.label).toBe('X (Twitter) + Grok');
+    expect(app.SERVICE_PRESETS.twitter.label).toBe('X (Twitter)');
+    expect(app.SERVICE_PRESETS.twitter.rules[0].payload).toBe('geosite-twitter');
+    expect(app.SERVICE_PRESETS.grok.rules[0].payload).toBe('geosite-xai');
+    expect(app.SERVICE_GROUPS.find(g => g.id === 'ai').items).toEqual(['chatgpt', 'claude', 'gemini', 'grok']);
     expect(app.SERVICE_PRESETS.roblox).toBeUndefined();
   });
 
-  it('renders CDN exceptions and keeps RU direct last in the other presets', () => {
+  it('renders grouped services and exceptions and keeps RU direct last', () => {
     app.setLanguage('ru', false);
 
-    const exceptionLabels = [...ctx.document.querySelectorAll('#presets-exceptions button')].map(button => button.textContent);
+    const serviceLabels = [...ctx.document.querySelectorAll('#presets-services .preset-group-main, #presets-services > .preset-btn')]
+      .map(button => button.textContent);
+    const exceptionLabels = [...ctx.document.querySelectorAll('#presets-exceptions .preset-group-main, #presets-exceptions > .preset-btn')]
+      .map(button => button.textContent);
     const otherLabels = [...ctx.document.querySelectorAll('#presets-other button')].map(button => button.textContent);
 
-    expect(exceptionLabels).toEqual(['Apple', 'Steam', 'Epic Games', 'Nintendo', 'Electronic Arts', 'miHoYo', 'Twitch', 'Kuro Games (Wuthering Waves)']);
+    expect(serviceLabels).toEqual(['Мессенджеры', 'YouTube', 'Соц. сети', 'Нейросети', 'CDN']);
+    expect(exceptionLabels).toEqual(['Игры', 'Apple', 'Twitch']);
     expect(otherLabels).toEqual(['Заблокированные сайты', 'RU трафик напрямую']);
+    expect(ctx.document.getElementById('rules-services-title').textContent).toBe('Популярное');
     expect(ctx.document.getElementById('rules-exceptions-hint').textContent).toContain('проксировании CDN');
+    expect(ctx.document.getElementById('presets-cdn')).toBeNull();
+  });
+
+  it('toggles cdn-all from the CDN group button', () => {
+    app.togglePresetGroup('services', 'cdn');
+    expect([...app.state.activeCdnProviders]).toEqual(['all']);
+    expect(app.state.rules.map(r => r.payload)).toEqual(['cdn-all']);
+
+    app.togglePresetGroup('services', 'cdn');
+    expect([...app.state.activeCdnProviders]).toEqual([]);
+    expect(app.state.rules).toEqual([]);
+  });
+
+  it('toggles all presets in a group and supports partial selection', () => {
+    app.togglePresetGroup('exceptions', 'games');
+
+    expect([...app.state.activeExceptionPresets].sort()).toEqual(
+      ['ea', 'epicgames', 'kurogames', 'mihoyo', 'nintendo', 'steam']
+    );
+    expect(app.state.rules.filter(r => r.payload.startsWith('geosite-')).map(r => r.payload).sort()).toEqual([
+      'geosite-ea',
+      'geosite-epicgames',
+      'geosite-kurogames',
+      'geosite-mihoyo',
+      'geosite-nintendo',
+      'geosite-steam'
+    ]);
+
+    app.togglePreset('exceptions', 'steam');
+    expect(ctx.document.querySelector('#presets-exceptions .preset-group-btn').classList.contains('partial')).toBe(true);
+
+    app.togglePresetGroup('exceptions', 'games');
+    expect([...app.state.activeExceptionPresets].sort()).toEqual(
+      ['ea', 'epicgames', 'kurogames', 'mihoyo', 'nintendo', 'steam']
+    );
+
+    app.togglePresetGroup('exceptions', 'games');
+    expect([...app.state.activeExceptionPresets]).toEqual([]);
   });
 
   it('places a selected exception before existing CDN rules', () => {

@@ -422,71 +422,200 @@ function renderTargetSelects() {
   if (!matchTarget.value) { matchTarget.value = 'DIRECT'; state.matchTarget = 'DIRECT'; }
 }
 
-function renderAllPresets() {
-  const labelOf = p => p.labelKey ? t(p.labelKey) : p.label;
-  document.getElementById('presets-services').innerHTML = Object.entries(SERVICE_PRESETS).map(([id, p]) =>
-    `<button class="preset-btn ${state.activeServicePresets.has(id)?'active':''}" onclick="togglePreset('services','${id}')">${escHtml(labelOf(p))}</button>`
-  ).join('');
+let openPresetDropdownKey = null;
 
-  document.getElementById('presets-cdn').innerHTML = CDN_PROVIDERS.map(p =>
-    `<button class="preset-btn ${state.activeCdnProviders.has(p.id)?'active':''}" onclick="toggleCdn('${p.id}')">${escHtml(labelOf(p))}</button>`
-  ).join('');
-
-  document.getElementById('presets-exceptions').innerHTML = Object.entries(EXCEPTION_PRESETS).map(([id, p]) =>
-    `<button class="preset-btn ${state.activeExceptionPresets.has(id)?'active':''}" onclick="togglePreset('exceptions','${id}')">${escHtml(labelOf(p))}</button>`
-  ).join('');
-
-  document.getElementById('presets-other').innerHTML = Object.entries(OTHER_PRESETS).map(([id, p]) =>
-    `<button class="preset-btn ${state.activeOtherPresets.has(id)?'active':''}" onclick="togglePreset('other','${id}')">${escHtml(labelOf(p))}</button>`
-  ).join('');
+function presetCategoryConfig(category) {
+  return {
+    services: [SERVICE_PRESETS, state.activeServicePresets, SERVICE_GROUPS],
+    exceptions: [EXCEPTION_PRESETS, state.activeExceptionPresets, EXCEPTION_GROUPS],
+    other: [OTHER_PRESETS, state.activeOtherPresets, null]
+  }[category];
 }
 
-function togglePreset(category, id) {
-  const categoryConfig = {
-    services: [SERVICE_PRESETS, state.activeServicePresets],
-    exceptions: [EXCEPTION_PRESETS, state.activeExceptionPresets],
-    other: [OTHER_PRESETS, state.activeOtherPresets]
-  };
-  const [presets, activeSet] = categoryConfig[category];
+function presetLabelOf(p) {
+  return p.labelKey ? t(p.labelKey) : p.label;
+}
 
-  if (activeSet.has(id)) {
+function groupSelectionState(items, activeSet) {
+  const n = items.filter(id => activeSet.has(id)).length;
+  if (n === 0) return '';
+  if (n === items.length) return 'active';
+  return 'partial';
+}
+
+function isCdnItemActive(id) {
+  return state.activeCdnProviders.has('all') || state.activeCdnProviders.has(id);
+}
+
+function cdnSelectionState() {
+  if (state.activeCdnProviders.has('all')) return 'active';
+  return groupSelectionState(CDN_PROVIDERS.map(p => p.id), state.activeCdnProviders);
+}
+
+function clearAllCdn() {
+  state.activeCdnProviders.clear();
+  state.rules = state.rules.filter(r => !(r.type === 'RULE-SET' && r.payload.startsWith('cdn-')));
+}
+
+function setCdnAll() {
+  state.activeCdnProviders = new Set(['all']);
+  state.rules = state.rules.filter(r => !(r.type === 'RULE-SET' && r.payload.startsWith('cdn-')));
+  state.rules.push({type: 'RULE-SET', payload: 'cdn-all', target: 'Proxy'});
+}
+
+function syncCdnRulesFromActive() {
+  state.rules = state.rules.filter(r => !(r.type === 'RULE-SET' && r.payload.startsWith('cdn-')));
+  for (const id of state.activeCdnProviders) {
+    state.rules.push({type: 'RULE-SET', payload: 'cdn-' + id, target: 'Proxy'});
+  }
+}
+
+function presetDdCheckHtml() {
+  return `<span class="preset-dd-check" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5.2L4.1 7.2L8 2.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+}
+
+function renderPresetGroupShell(key, sel, label, category, groupId, itemsHtml) {
+  const open = openPresetDropdownKey === key ? ' open' : '';
+  return `<div class="preset-group${open}" data-preset-group="${key}">` +
+    `<div class="preset-group-btn ${sel}">` +
+    `<button type="button" class="preset-group-main" onclick="togglePresetGroup('${category}','${groupId}')">${escHtml(label)}</button>` +
+    `<button type="button" class="preset-group-chevron" onclick="togglePresetDropdown(event,'${category}','${groupId}')" aria-label="${escHtml(t('presetGroupMore'))}" title="${escHtml(t('presetGroupMore'))}">` +
+    `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>` +
+    `</button></div>` +
+    `<div class="preset-dropdown" onclick="event.stopPropagation()">${itemsHtml}</div>` +
+    `</div>`;
+}
+
+function renderCdnGroup(category) {
+  const key = `${category}:cdn`;
+  const label = t('presetGroupCdn');
+  const itemsHtml = CDN_PROVIDERS.map(p =>
+    `<button type="button" class="preset-dd-item ${isCdnItemActive(p.id) ? 'active' : ''}" onclick="toggleCdn('${p.id}')">` +
+    presetDdCheckHtml() +
+    `<span>${escHtml(presetLabelOf(p))}</span></button>`
+  ).join('');
+  return renderPresetGroupShell(key, cdnSelectionState(), label, category, 'cdn', itemsHtml);
+}
+
+function renderPresetGroups(containerId, category) {
+  const [presets, activeSet, groups] = presetCategoryConfig(category);
+  const html = groups.map(group => {
+    if (group.type === 'cdn') return renderCdnGroup(category);
+    if (group.items.length === 1) {
+      const id = group.items[0];
+      const p = presets[id];
+      return `<button type="button" class="preset-btn ${activeSet.has(id) ? 'active' : ''}" onclick="togglePreset('${category}','${id}')">${escHtml(presetLabelOf(p))}</button>`;
+    }
+    const key = `${category}:${group.id}`;
+    const label = group.labelKey ? t(group.labelKey) : group.label;
+    const itemsHtml = group.items.map(id => {
+      const p = presets[id];
+      return `<button type="button" class="preset-dd-item ${activeSet.has(id) ? 'active' : ''}" onclick="togglePreset('${category}','${id}')">` +
+        presetDdCheckHtml() +
+        `<span>${escHtml(presetLabelOf(p))}</span></button>`;
+    }).join('');
+    return renderPresetGroupShell(key, groupSelectionState(group.items, activeSet), label, category, group.id, itemsHtml);
+  }).join('');
+  document.getElementById(containerId).innerHTML = html;
+}
+
+function renderAllPresets() {
+  let dropdownScroll = 0;
+  if (openPresetDropdownKey) {
+    const openDd = document.querySelector(`[data-preset-group="${openPresetDropdownKey}"] .preset-dropdown`);
+    if (openDd) dropdownScroll = openDd.scrollTop;
+  }
+
+  renderPresetGroups('presets-services', 'services');
+  renderPresetGroups('presets-exceptions', 'exceptions');
+
+  document.getElementById('presets-other').innerHTML = Object.entries(OTHER_PRESETS).map(([id, p]) =>
+    `<button type="button" class="preset-btn ${state.activeOtherPresets.has(id)?'active':''}" onclick="togglePreset('other','${id}')">${escHtml(presetLabelOf(p))}</button>`
+  ).join('');
+
+  if (openPresetDropdownKey && dropdownScroll) {
+    const openDd = document.querySelector(`[data-preset-group="${openPresetDropdownKey}"] .preset-dropdown`);
+    if (openDd) openDd.scrollTop = dropdownScroll;
+  }
+}
+
+function setPresetActive(category, id, wantActive) {
+  const [presets, activeSet] = presetCategoryConfig(category);
+  const isActive = activeSet.has(id);
+  if (wantActive === isActive) return;
+
+  if (!wantActive) {
     activeSet.delete(id);
     const presetRules = presets[id].rules;
     state.rules = state.rules.filter(r =>
       !presetRules.some(pr => pr.type === r.type && pr.payload === r.payload && pr.target === r.target)
     );
-  } else {
-    activeSet.add(id);
-    for (const r of presets[id].rules) {
-      if (!state.rules.some(er => er.type === r.type && er.payload === r.payload)) {
-        const firstCdnRule = state.rules.findIndex(rule => rule.type === 'RULE-SET' && rule.payload.startsWith('cdn-'));
-        if (category === 'exceptions' && firstCdnRule !== -1) state.rules.splice(firstCdnRule, 0, {...r});
-        else state.rules.push({...r});
-      }
+    return;
+  }
+
+  activeSet.add(id);
+  for (const r of presets[id].rules) {
+    if (!state.rules.some(er => er.type === r.type && er.payload === r.payload)) {
+      const firstCdnRule = state.rules.findIndex(rule => rule.type === 'RULE-SET' && rule.payload.startsWith('cdn-'));
+      if (category === 'exceptions' && firstCdnRule !== -1) state.rules.splice(firstCdnRule, 0, {...r});
+      else state.rules.push({...r});
     }
   }
+}
+
+function togglePreset(category, id) {
+  const [, activeSet] = presetCategoryConfig(category);
+  setPresetActive(category, id, !activeSet.has(id));
   renderAllPresets();
   renderRules();
 }
 
+function togglePresetGroup(category, groupId) {
+  const [, activeSet, groups] = presetCategoryConfig(category);
+  const group = groups.find(g => g.id === groupId);
+  if (!group) return;
+
+  if (group.type === 'cdn') {
+    if (cdnSelectionState() === 'active') clearAllCdn();
+    else setCdnAll();
+    renderAllPresets();
+    renderRules();
+    return;
+  }
+
+  const allOn = group.items.every(id => activeSet.has(id));
+  for (const id of group.items) setPresetActive(category, id, !allOn);
+  renderAllPresets();
+  renderRules();
+}
+
+function togglePresetDropdown(event, category, groupId) {
+  event.stopPropagation();
+  const key = `${category}:${groupId}`;
+  openPresetDropdownKey = openPresetDropdownKey === key ? null : key;
+  renderAllPresets();
+}
+
+function closePresetDropdowns() {
+  if (!openPresetDropdownKey) return;
+  openPresetDropdownKey = null;
+  renderAllPresets();
+}
+
 function toggleCdn(id) {
-  if (state.activeCdnProviders.has(id)) {
+  if (state.activeCdnProviders.has('all')) {
+    state.activeCdnProviders = new Set(CDN_PROVIDERS.map(p => p.id).filter(p => p !== id));
+    syncCdnRulesFromActive();
+  } else if (state.activeCdnProviders.has(id)) {
     state.activeCdnProviders.delete(id);
     state.rules = state.rules.filter(r => !(r.type === 'RULE-SET' && r.payload === 'cdn-' + id));
   } else {
-    if (id === 'all') {
-      // Remove all individual CDN rules
-      for (const p of CDN_PROVIDERS) {
-        if (p.id !== 'all') state.activeCdnProviders.delete(p.id);
-      }
-      state.rules = state.rules.filter(r => !(r.type === 'RULE-SET' && r.payload.startsWith('cdn-') && r.payload !== 'cdn-all'));
-    } else if (state.activeCdnProviders.has('all')) {
-      // Switching from "all" to individual — remove "all" first
-      state.activeCdnProviders.delete('all');
-      state.rules = state.rules.filter(r => !(r.type === 'RULE-SET' && r.payload === 'cdn-all'));
-    }
     state.activeCdnProviders.add(id);
-    state.rules.push({type: 'RULE-SET', payload: 'cdn-' + id, target: 'Proxy'});
+    const ids = CDN_PROVIDERS.map(p => p.id);
+    if (ids.every(p => state.activeCdnProviders.has(p))) setCdnAll();
+    else if (!state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'cdn-' + id)) {
+      state.rules.push({type: 'RULE-SET', payload: 'cdn-' + id, target: 'Proxy'});
+    }
   }
   renderAllPresets();
   renderRules();

@@ -62,9 +62,7 @@ const I18N = {
     proxyThPort: 'Порт',
     rulesTitle: 'Правила маршрутизации',
     rulesDesc: 'Настройте, какой трафик проксировать, а какой направлять напрямую',
-    rulesServicesTitle: 'Популярные сервисы',
-    rulesCdnTitle: 'CDN',
-    rulesCdnHint: 'IP-диапазоны CDN-провайдеров для проксирования',
+    rulesServicesTitle: 'Популярное',
     rulesExceptionsTitle: 'Исключения',
     rulesExceptionsHint: 'Используйте при проксировании CDN: адреса этих сервисов могут пересекаться с диапазонами CDN, хотя сами сервисы не заблокированы и доступны напрямую.',
     rulesOtherTitle: 'Прочее',
@@ -120,7 +118,12 @@ const I18N = {
     subscriptionType: 'подписка',
     presetDirectRu: 'RU трафик напрямую',
     presetRuBlocked: 'Заблокированные сайты',
-    presetAllCdn: 'Все CDN',
+    presetGroupMessengers: 'Мессенджеры',
+    presetGroupSocial: 'Соц. сети',
+    presetGroupAi: 'Нейросети',
+    presetGroupGames: 'Игры',
+    presetGroupCdn: 'CDN',
+    presetGroupMore: 'Подробнее',
     deviceDesktopLabel: 'Windows / macOS / Linux',
     deviceDesktopHintHtml: 'Клиент: <a href="https://github.com/pluralplay/FlClashX/releases" target="_blank">FlClashX</a>',
     deviceAndroidLabel: 'Android',
@@ -169,9 +172,7 @@ const I18N = {
     proxyThPort: 'Port',
     rulesTitle: 'Routing Rules',
     rulesDesc: 'Configure which traffic goes through proxy and which goes directly',
-    rulesServicesTitle: 'Popular Services',
-    rulesCdnTitle: 'CDN',
-    rulesCdnHint: 'CDN IP ranges for proxy routing',
+    rulesServicesTitle: 'Popular',
     rulesExceptionsTitle: 'Exceptions',
     rulesExceptionsHint: 'Use with CDN proxying: these services may share address ranges with CDNs, although they may not be blocked in your region.',
     rulesOtherTitle: 'Other',
@@ -227,7 +228,12 @@ const I18N = {
     subscriptionType: 'subscription',
     presetDirectRu: 'RU traffic direct',
     presetRuBlocked: 'Blocked sites',
-    presetAllCdn: 'All CDNs',
+    presetGroupMessengers: 'Messengers',
+    presetGroupSocial: 'Social',
+    presetGroupAi: 'AI',
+    presetGroupGames: 'Games',
+    presetGroupCdn: 'CDN',
+    presetGroupMore: 'More',
     deviceDesktopLabel: 'Windows / macOS / Linux',
     deviceDesktopHintHtml: 'Client: <a href="https://github.com/pluralplay/FlClashX/releases" target="_blank">FlClashX</a>',
     deviceAndroidLabel: 'Android',
@@ -321,15 +327,26 @@ const SERVICE_PRESETS = {
     {type:'RULE-SET',payload:'geosite-discord',target:'Proxy'},
     {type:'RULE-SET',payload:'discord-voice',target:'Proxy'}
   ] },
-  youtube:   { label: 'YouTube',   rules: [{type:'RULE-SET',payload:'geosite-youtube',target:'Proxy'}] },
-  twitter:   { label: 'X (Twitter) + Grok', rules: [{type:'RULE-SET',payload:'geosite-x',target:'Proxy'}] },
-  facebook:  { label: 'Facebook',  rules: [{type:'RULE-SET',payload:'geosite-facebook',target:'Proxy'}] },
   whatsapp:  { label: 'WhatsApp',  rules: [{type:'RULE-SET',payload:'geosite-whatsapp',target:'Proxy'}] },
+  viber:     { label: 'Viber',     rules: [{type:'RULE-SET',payload:'geosite-viber',target:'Proxy'}] },
+  signal:    { label: 'Signal',    rules: [{type:'RULE-SET',payload:'geosite-signal',target:'Proxy'}] },
+  youtube:   { label: 'YouTube',   rules: [{type:'RULE-SET',payload:'geosite-youtube',target:'Proxy'}] },
+  twitter:   { label: 'X (Twitter)', rules: [{type:'RULE-SET',payload:'geosite-twitter',target:'Proxy'}] },
+  facebook:  { label: 'Facebook',  rules: [{type:'RULE-SET',payload:'geosite-facebook',target:'Proxy'}] },
   instagram: { label: 'Instagram', rules: [{type:'RULE-SET',payload:'geosite-instagram',target:'Proxy'}] },
   chatgpt:   { label: 'ChatGPT',   rules: [{type:'RULE-SET',payload:'geosite-openai',target:'Proxy'}] },
+  claude:    { label: 'Claude',    rules: [{type:'RULE-SET',payload:'geosite-anthropic',target:'Proxy'}] },
   gemini:    { label: 'Gemini',    rules: [{type:'RULE-SET',payload:'geosite-google-gemini',target:'Proxy'}] },
-  claude:    { label: 'Claude',    rules: [{type:'RULE-SET',payload:'geosite-anthropic',target:'Proxy'}] }
+  grok:      { label: 'Grok',      rules: [{type:'RULE-SET',payload:'geosite-xai',target:'Proxy'}] }
 };
+
+const SERVICE_GROUPS = [
+  { id: 'messengers', labelKey: 'presetGroupMessengers', items: ['telegram', 'discord', 'whatsapp', 'viber', 'signal'] },
+  { id: 'youtube', items: ['youtube'] },
+  { id: 'social', labelKey: 'presetGroupSocial', items: ['twitter', 'facebook', 'instagram'] },
+  { id: 'ai', labelKey: 'presetGroupAi', items: ['chatgpt', 'claude', 'gemini', 'grok'] },
+  { id: 'cdn', labelKey: 'presetGroupCdn', type: 'cdn' }
+];
 
 const OTHER_PRESETS = {
   ruBlocked: { labelKey: 'presetRuBlocked', rules: [{type:'RULE-SET',payload:'ru-blocked',target:'Proxy'}] },
@@ -337,18 +354,23 @@ const OTHER_PRESETS = {
 };
 
 const EXCEPTION_PRESETS = {
-  apple:     { label: 'Apple', rules: [{type:'RULE-SET',payload:'geosite-apple',target:'DIRECT'}] },
   steam:     { label: 'Steam', rules: [{type:'RULE-SET',payload:'geosite-steam',target:'DIRECT'}] },
   epicgames: { label: 'Epic Games', rules: [{type:'RULE-SET',payload:'geosite-epicgames',target:'DIRECT'}] },
   nintendo:  { label: 'Nintendo', rules: [{type:'RULE-SET',payload:'geosite-nintendo',target:'DIRECT'}] },
   ea:        { label: 'Electronic Arts', rules: [{type:'RULE-SET',payload:'geosite-ea',target:'DIRECT'}] },
   mihoyo:    { label: 'miHoYo', rules: [{type:'RULE-SET',payload:'geosite-mihoyo',target:'DIRECT'}] },
-  twitch:    { label: 'Twitch', rules: [{type:'RULE-SET',payload:'geosite-twitch',target:'DIRECT'}] },
-  kurogames: { label: 'Kuro Games (Wuthering Waves)', rules: [{type:'RULE-SET',payload:'geosite-kurogames',target:'DIRECT'}] }
+  kurogames: { label: 'Kuro Games (Wuthering Waves)', rules: [{type:'RULE-SET',payload:'geosite-kurogames',target:'DIRECT'}] },
+  apple:     { label: 'Apple', rules: [{type:'RULE-SET',payload:'geosite-apple',target:'DIRECT'}] },
+  twitch:    { label: 'Twitch', rules: [{type:'RULE-SET',payload:'geosite-twitch',target:'DIRECT'}] }
 };
 
+const EXCEPTION_GROUPS = [
+  { id: 'games', labelKey: 'presetGroupGames', items: ['steam', 'epicgames', 'nintendo', 'ea', 'mihoyo', 'kurogames'] },
+  { id: 'apple', items: ['apple'] },
+  { id: 'twitch', items: ['twitch'] }
+];
+
 const CDN_PROVIDERS = [
-  { id: 'all',          labelKey: 'presetAllCdn' },
   { id: 'akamai',       label: 'Akamai' },
   { id: 'aws',          label: 'AWS' },
   { id: 'buyvm',        label: 'BuyVM' },

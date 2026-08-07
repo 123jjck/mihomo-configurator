@@ -312,6 +312,7 @@ function generateFromImported() {
   const newRuleProviders = {};
   const knownAutoNames = new Set();
   for (const p of CDN_PROVIDERS) knownAutoNames.add('cdn-' + p.id);
+  knownAutoNames.add('cdn-all');
   knownAutoNames.add('telegram');
   knownAutoNames.add('discord-voice');
   knownAutoNames.add('ru-blocked');
@@ -536,9 +537,13 @@ function detectActivePresets() {
     }
   }
 
-  for (const p of CDN_PROVIDERS) {
-    if (state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'cdn-' + p.id)) {
-      state.activeCdnProviders.add(p.id);
+  if (state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'cdn-all')) {
+    state.activeCdnProviders.add('all');
+  } else {
+    for (const p of CDN_PROVIDERS) {
+      if (state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'cdn-' + p.id)) {
+        state.activeCdnProviders.add(p.id);
+      }
     }
   }
 }
@@ -567,6 +572,7 @@ function init() {
   if (switcher) {
     switcher.addEventListener('change', e => setLanguage(e.target.value));
   }
+  document.addEventListener('click', closePresetDropdowns);
   state.lang = browserLanguage();
   setLanguage(state.lang, false);
 }
