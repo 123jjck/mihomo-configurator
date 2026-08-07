@@ -125,16 +125,55 @@ describe('UI state helpers', () => {
     ]);
   });
 
-  it('prioritizes Telegram rule rendering before other rules for stable sniffing config', () => {
-    app.state.rules = [
-      { type: 'DOMAIN-SUFFIX', payload: 'example.com', target: 'DIRECT' },
-      { type: 'RULE-SET', payload: 'telegram', target: 'Proxy' }
-    ];
-
-    app.renderRules();
+  it('pins the Telegram rule first when rules change, for stable sniffing config', () => {
+    app.togglePreset('exceptions', 'steam');
+    app.togglePreset('services', 'telegram');
 
     expect(app.state.rules[0]).toMatchObject({ type: 'RULE-SET', payload: 'telegram' });
     expect(ctx.document.querySelector('#rules-list .rule-text').textContent).toBe('RULE-SET,telegram');
+  });
+
+  it('keeps the pinned Telegram rule in place and disables its move buttons', () => {
+    app.togglePreset('services', 'telegram');
+    app.togglePreset('exceptions', 'steam');
+
+    app.moveRule(0, 1);
+    expect(app.state.rules[0]).toMatchObject({ payload: 'telegram' });
+
+    // The rule below the pinned block cannot be pulled above it either.
+    app.moveRule(1, -1);
+    expect(app.state.rules.map(r => r.payload)).toEqual(['telegram', 'geosite-steam']);
+
+    const ruleItems = ctx.document.querySelectorAll('#rules-list .rule-item');
+    const pinnedMoves = ruleItems[0].querySelectorAll('.rule-actions button');
+    expect(pinnedMoves[0].disabled).toBe(true);
+    expect(pinnedMoves[1].disabled).toBe(true);
+    expect(ruleItems[1].querySelectorAll('.rule-actions button')[0].disabled).toBe(true);
+  });
+
+  it('derives preset highlighting from the rules, not from a parallel set', () => {
+    app.togglePreset('services', 'telegram');
+    expect(app.state.activeServicePresets.has('telegram')).toBe(true);
+
+    // Deleting the rule by hand must clear the preset badge too.
+    app.removeRule(0);
+    expect(app.state.rules).toEqual([]);
+    expect(app.state.activeServicePresets.has('telegram')).toBe(false);
+    expect(ctx.document.querySelector('#presets-services .preset-group-btn').className).not.toContain('partial');
+
+    // So must retargeting it away from what the preset defines.
+    app.togglePreset('exceptions', 'steam');
+    expect(app.state.activeExceptionPresets.has('steam')).toBe(true);
+    app.changeRuleTarget(0, 'Proxy');
+    expect(app.state.activeExceptionPresets.has('steam')).toBe(false);
+  });
+
+  it('clears the CDN badge when a cdn rule is removed by hand', () => {
+    app.toggleCdn('cloudflare');
+    expect(app.state.activeCdnProviders.has('cloudflare')).toBe(true);
+
+    app.removeRule(app.state.rules.findIndex(r => r.payload === 'cdn-cloudflare'));
+    expect(app.state.activeCdnProviders.has('cloudflare')).toBe(false);
   });
 
   it('renders proxy names in rule target selectors and falls back when removed', () => {

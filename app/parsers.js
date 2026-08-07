@@ -132,7 +132,7 @@ function parseMihomoVShareLink(rawUrl, scheme, { decodeBase64Host = false } = {}
 
   const p = u.searchParams;
   const proxy = {
-    name: u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `${scheme}-${server}`,
+    name: shareLinkName(u, `${scheme}-${server}`),
     type: scheme,
     server,
     port,
@@ -202,26 +202,13 @@ function parseMihomoVShareLink(rawUrl, scheme, { decodeBase64Host = false } = {}
       if (p.get('host')) proxy['h2-opts'].host = [p.get('host')];
       break;
     case 'ws':
-    case 'httpupgrade': {
+    case 'httpupgrade':
       proxy['ws-opts'] = {
         path: p.get('path') || '',
         headers: buildMihomoShareWsHeaders(p.get('host') || '')
       };
-      const earlyData = p.get('ed');
-      if (earlyData) {
-        const size = Number(earlyData);
-        if (Number.isFinite(size) && size >= 0) {
-          if (network === 'ws') {
-            proxy['ws-opts']['max-early-data'] = size;
-            proxy['ws-opts']['early-data-header-name'] = 'Sec-WebSocket-Protocol';
-          } else {
-            proxy['ws-opts']['v2ray-http-upgrade-fast-open'] = true;
-          }
-        }
-      }
-      if (p.get('eh')) proxy['ws-opts']['early-data-header-name'] = p.get('eh');
+      applyWsEarlyData(proxy['ws-opts'], network, p.get('ed'), p.get('eh'));
       break;
-    }
     case 'grpc':
       proxy['grpc-opts'] = { 'grpc-service-name': p.get('serviceName') || '' };
       break;
@@ -248,6 +235,11 @@ function parseMihomoVShareLink(rawUrl, scheme, { decodeBase64Host = false } = {}
 
   return proxy;
 }
+/**
+ * Build a mihomo VLESS proxy from already-extracted Xray outbound settings.
+ * Only Amnezia `.vpn` payloads use this path, so it covers exactly the stream
+ * types their xray container emits — xhttp stream settings are not mapped.
+ */
 function buildVlessProxy({
   name,
   server,
@@ -260,19 +252,13 @@ function buildVlessProxy({
   skipCertVerify = false,
   alpn = [],
   fingerprint = '',
-  tlsFingerprint = '',
   realityPublicKey = '',
   realityShortId = '',
   wsPath = '/',
   wsHost = '',
   grpcServiceName = '',
   h2Path = '/',
-  h2Host = [],
-  packetEncoding = '',
-  xhttpPath = '',
-  xhttpHost = '',
-  xhttpMode = '',
-  xhttpExtra = null
+  h2Host = []
 }) {
   if (!name || !server || !Number.isFinite(+port) || !uuid) return null;
 
@@ -290,23 +276,14 @@ function buildVlessProxy({
   if (skipCertVerify) proxy['skip-cert-verify'] = true;
   const alpnList = (Array.isArray(alpn) ? alpn : [alpn]).map(v => String(v).trim()).filter(Boolean);
   if (alpnList.length) proxy.alpn = alpnList;
-  switch (String(packetEncoding || '').toLowerCase()) {
-    case 'none':
-      break;
-    case 'packet':
-      proxy['packet-addr'] = true;
-      break;
-    default:
-      proxy.xudp = true;
-      break;
-  }
+  // Amnezia payloads carry no packetEncoding field; mihomo's default for VLESS is xudp.
+  proxy.xudp = true;
 
   if (fingerprint) {
     proxy['client-fingerprint'] = fingerprint;
   } else if (proxy.tls) {
     proxy['client-fingerprint'] = 'chrome';
   }
-  if (tlsFingerprint) proxy.fingerprint = tlsFingerprint;
 
   if (sec === 'reality') {
     proxy['reality-opts'] = {};
@@ -325,17 +302,6 @@ function buildVlessProxy({
   } else if (net === 'h2' || net === 'http') {
     const host = Array.isArray(h2Host) ? h2Host : [h2Host || server];
     proxy['h2-opts'] = { path: h2Path || '/', host: host.filter(Boolean) };
-  } else if (net === 'xhttp') {
-    proxy['xhttp-opts'] = {};
-    if (xhttpPath) proxy['xhttp-opts'].path = xhttpPath;
-    if (xhttpHost) proxy['xhttp-opts'].host = xhttpHost;
-    if (xhttpMode) proxy['xhttp-opts'].mode = xhttpMode;
-    if (xhttpExtra && typeof xhttpExtra === 'object') {
-      parseXHTTPExtra(xhttpExtra, proxy['xhttp-opts']);
-    }
-    if (proxy['xhttp-opts'].mode === 'stream-one') {
-      delete proxy['xhttp-opts']['download-settings'];
-    }
   }
 
   return proxy;
@@ -396,6 +362,61 @@ function parseRelativePathQuery(pathValue) {
   };
 }
 
+/** Display name taken from the URL fragment, falling back to a generated label. */
+function shareLinkName(u, fallback) {
+  return u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : fallback;
+}
+
+/**
+ * Shared prologue for `<scheme>://[user[:pass]@]host[:port][?query][#name]` share links.
+ * Returns null when the URL is unparsable, uses a different scheme, or has no host.
+ * `namePrefix` picks the fallback name shape: `prefix-host` when set, `host:port` otherwise.
+ */
+function parseShareLinkBase(rawUrl, schemes, { namePrefix = '', defaultPort = '', requirePort = false } = {}) {
+  const u = parseUrlOrNull(rawUrl);
+  if (!u) return null;
+  if (!schemes.includes(u.protocol.slice(0, -1).toLowerCase())) return null;
+
+  const server = u.hostname;
+  if (!server) return null;
+  const portStr = u.port || String(defaultPort);
+  if (requirePort && !portStr) return null;
+  const port = Number(portStr);
+  if (!Number.isFinite(port)) return null;
+
+  return {
+    url: u,
+    params: u.searchParams,
+    server,
+    port,
+    portStr,
+    name: shareLinkName(u, namePrefix ? `${namePrefix}-${server}` : `${server}:${portStr}`),
+    username: decodeURIComponentSafe(u.username),
+    password: decodeURIComponentSafe(u.password)
+  };
+}
+
+/**
+ * Apply v2ray early-data hints to ws-opts. `ed` carries the max early-data size,
+ * `eh` overrides the header name. Returns whether `ed` was accepted, so callers
+ * that inherit it from a path query know to strip it.
+ */
+function applyWsEarlyData(wsOpts, network, edValue, ehValue) {
+  let applied = false;
+  const size = Number(edValue);
+  if (edValue && Number.isFinite(size) && size >= 0) {
+    if (network === 'ws') {
+      wsOpts['max-early-data'] = size;
+      wsOpts['early-data-header-name'] = 'Sec-WebSocket-Protocol';
+    } else {
+      wsOpts['v2ray-http-upgrade-fast-open'] = true;
+    }
+    applied = true;
+  }
+  if (ehValue) wsOpts['early-data-header-name'] = ehValue;
+  return applied;
+}
+
 function parseVless(rawUrl) {
   return parseMihomoVShareLink(rawUrl, 'vless', { decodeBase64Host: true });
 }
@@ -453,22 +474,17 @@ function parseVmessLegacyFromJson(json) {
     if (json.path) {
       let path = String(json.path);
       const parsedPath = parseRelativePathQuery(path);
-      const earlyData = parsedPath.query.get('ed');
-      if (earlyData) {
-        const size = Number(earlyData);
-        if (Number.isFinite(size)) {
-          if (network === 'ws') {
-            proxy['ws-opts']['max-early-data'] = size;
-            proxy['ws-opts']['early-data-header-name'] = 'Sec-WebSocket-Protocol';
-          } else {
-            proxy['ws-opts']['v2ray-http-upgrade-fast-open'] = true;
-          }
-          parsedPath.query.delete('ed');
-          path = parsedPath.path + (parsedPath.query.toString() ? `?${parsedPath.query.toString()}` : '');
-        }
+      // Legacy vmess smuggles `ed` / `eh` inside the path query; strip `ed` once consumed.
+      const applied = applyWsEarlyData(
+        proxy['ws-opts'],
+        network,
+        parsedPath.query.get('ed'),
+        parsedPath.query.get('eh')
+      );
+      if (applied) {
+        parsedPath.query.delete('ed');
+        path = parsedPath.path + (parsedPath.query.toString() ? `?${parsedPath.query.toString()}` : '');
       }
-      const earlyHeader = parsedPath.query.get('eh');
-      if (earlyHeader) proxy['ws-opts']['early-data-header-name'] = earlyHeader;
       proxy['ws-opts'].path = path;
     }
   } else if (network === 'grpc') {
@@ -525,7 +541,7 @@ function parseSS(rawUrl) {
   }
   if (!cipher) return null;
 
-  const name = u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `ss-${server}`;
+  const name = shareLinkName(u, `ss-${server}`);
   const proxy = { name, type: 'ss', server, port, cipher, password, udp: true };
   const q = u.searchParams;
   if (parseBoolish(q.get('udp-over-tcp')) || q.get('uot') === '1') proxy['udp-over-tcp'] = true;
@@ -557,20 +573,16 @@ function parseSS(rawUrl) {
 }
 
 function parseTrojan(rawUrl) {
-  const u = parseUrlOrNull(rawUrl);
-  if (!u || u.protocol !== 'trojan:') return null;
-  const server = u.hostname;
-  const port = Number(u.port);
-  const password = decodeURIComponentSafe(u.username);
-  if (!server || !Number.isFinite(port) || !password) return null;
+  const base = parseShareLinkBase(rawUrl, ['trojan'], { namePrefix: 'trojan' });
+  if (!base || !base.username) return null;
 
-  const p = u.searchParams;
+  const { params: p, server, port } = base;
   const proxy = {
-    name: u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `trojan-${server}`,
+    name: base.name,
     type: 'trojan',
     server,
     port,
-    password,
+    password: base.username,
     udp: true
   };
   if (p.get('sni')) proxy.sni = p.get('sni');
@@ -596,21 +608,17 @@ function parseTrojan(rawUrl) {
 }
 
 function parseHysteria2(rawUrl) {
-  const u = parseUrlOrNull(rawUrl);
-  if (!u || (u.protocol !== 'hysteria2:' && u.protocol !== 'hy2:')) return null;
-  const server = u.hostname;
-  const port = Number(u.port || 443);
-  if (!server || !Number.isFinite(port)) return null;
+  const base = parseShareLinkBase(rawUrl, ['hysteria2', 'hy2'], { namePrefix: 'hy2', defaultPort: 443 });
+  if (!base) return null;
 
-  const p = u.searchParams;
+  const { params: p } = base;
   const proxy = {
-    name: u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `hy2-${server}`,
+    name: base.name,
     type: 'hysteria2',
-    server,
-    port
+    server: base.server,
+    port: base.port
   };
-  const password = decodeURIComponentSafe(u.username);
-  if (password) proxy.password = password;
+  if (base.username) proxy.password = base.username;
   if (p.get('sni')) proxy.sni = p.get('sni');
   if (parseBoolish(p.get('insecure'))) proxy['skip-cert-verify'] = true;
   const obfs = p.get('obfs');
@@ -627,23 +635,18 @@ function parseHysteria2(rawUrl) {
 }
 
 function parseTuic(rawUrl) {
-  const u = parseUrlOrNull(rawUrl);
-  if (!u || u.protocol !== 'tuic:') return null;
-  const server = u.hostname;
-  const port = Number(u.port);
-  if (!server || !Number.isFinite(port)) return null;
+  const base = parseShareLinkBase(rawUrl, ['tuic'], { namePrefix: 'tuic' });
+  if (!base) return null;
 
-  const p = u.searchParams;
+  const { params: p, username, password } = base;
   const proxy = {
-    name: u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `tuic-${server}`,
+    name: base.name,
     type: 'tuic',
-    server,
-    port,
+    server: base.server,
+    port: base.port,
     udp: true
   };
 
-  const username = decodeURIComponentSafe(u.username);
-  const password = decodeURIComponentSafe(u.password);
   if (password) {
     proxy.uuid = username;
     proxy.password = password;
@@ -725,20 +728,19 @@ function normalizeAwgValue(v) {
   return v;
 }
 
-function getAwgKey(obj, k) {
-  if (!obj) return undefined;
-  // Fast path: exact match
-  if (k in obj) return obj[k];
-  // Case-insensitive search — handles variants like PresharedKey / PreSharedKey / PRESHAREDKEY
-  const lower = k.toLowerCase();
-  for (const key of Object.keys(obj)) {
-    if (key.toLowerCase() === lower) return obj[key];
+/**
+ * Build a case-insensitive key lookup over a WireGuard/AmneziaWG section.
+ * The index is built once per section instead of rescanning the keys on every
+ * lookup, and exact matches still win over case-folded ones — this handles
+ * variants like PresharedKey / PreSharedKey / PRESHAREDKEY.
+ */
+function awgLookup(obj) {
+  const byLower = new Map();
+  for (const [key, value] of Object.entries(obj || {})) {
+    const lower = key.toLowerCase();
+    if (!byLower.has(lower)) byLower.set(lower, value);
   }
-  return undefined;
-}
-
-function hasAwgKey(obj, k) {
-  return getAwgKey(obj, k) !== undefined;
+  return key => (obj && key in obj) ? obj[key] : byLower.get(key.toLowerCase());
 }
 
 function toIntMaybe(v) {
@@ -764,55 +766,55 @@ function normalizeAwgVersion(rawVersion, hasV20, hasV15) {
   return hasV20 ? '2.0' : (hasV15 ? '1.5' : '1.0');
 }
 
-function hasAnyAwgKey(obj) {
-  const keys = [
-    'Jc','Jmin','Jmax',
-    'S1','S2','S3','S4',
-    'H1','H2','H3','H4',
-    'I1','I2','I3','I4','I5',
-    'J1','J2','J3',
-    'Itime'
-  ];
-  for (const k of keys) {
-    if (hasAwgKey(obj, k)) return true;
-  }
-  return false;
+const asAwgInt = v => toIntMaybe(v) ?? 0;
+const asAwgIntOrRange = v => toIntOrRangeMaybe(v) ?? 0;
+
+/**
+ * AmneziaWG obfuscation knobs, in the order mihomo expects them.
+ * `v15` marks fields that only exist from protocol 1.5 onward. This list is the
+ * single definition of which keys count as AmneziaWG — see hasAnyAwgKey().
+ */
+const AWG_FIELD_SPECS = [
+  { key: 'Jc',    out: 'jc',    parse: asAwgInt },
+  { key: 'Jmin',  out: 'jmin',  parse: asAwgInt },
+  { key: 'Jmax',  out: 'jmax',  parse: asAwgInt },
+  { key: 'S1',    out: 's1',    parse: asAwgInt },
+  { key: 'S2',    out: 's2',    parse: asAwgInt },
+  { key: 'S3',    out: 's3',    parse: asAwgInt },
+  { key: 'S4',    out: 's4',    parse: asAwgInt },
+  { key: 'H1',    out: 'h1',    parse: asAwgIntOrRange },
+  { key: 'H2',    out: 'h2',    parse: asAwgIntOrRange },
+  { key: 'H3',    out: 'h3',    parse: asAwgIntOrRange },
+  { key: 'H4',    out: 'h4',    parse: asAwgIntOrRange },
+  { key: 'I1',    out: 'i1',    parse: normalizeAwgValue, v15: true },
+  { key: 'I2',    out: 'i2',    parse: normalizeAwgValue, v15: true },
+  { key: 'I3',    out: 'i3',    parse: normalizeAwgValue, v15: true },
+  { key: 'I4',    out: 'i4',    parse: normalizeAwgValue, v15: true },
+  { key: 'I5',    out: 'i5',    parse: normalizeAwgValue, v15: true },
+  { key: 'J1',    out: 'j1',    parse: normalizeAwgValue, v15: true },
+  { key: 'J2',    out: 'j2',    parse: normalizeAwgValue, v15: true },
+  { key: 'J3',    out: 'j3',    parse: normalizeAwgValue, v15: true },
+  { key: 'Itime', out: 'itime', parse: asAwgInt,          v15: true }
+];
+
+function hasAnyAwgKey(get) {
+  return AWG_FIELD_SPECS.some(spec => get(spec.key) !== undefined);
 }
 
-function collectAwgOptions(obj) {
-  const h1 = toIntOrRangeMaybe(getAwgKey(obj, 'H1'));
-  const h2 = toIntOrRangeMaybe(getAwgKey(obj, 'H2'));
-  const h3 = toIntOrRangeMaybe(getAwgKey(obj, 'H3'));
-  const h4 = toIntOrRangeMaybe(getAwgKey(obj, 'H4'));
-  const hasV20 =
-    hasAwgKey(obj, 'S3') || hasAwgKey(obj, 'S4') ||
-    [h1, h2, h3, h4].some(v => typeof v === 'string');
-  const hasV15 = hasAwgKey(obj, 'I1');
+function collectAwgOptions(get) {
+  const hasV15 = get('I1') !== undefined;
 
   const awg = {};
-  if (hasAwgKey(obj, 'Jc')) awg.jc = toIntMaybe(getAwgKey(obj, 'Jc')) ?? 0;
-  if (hasAwgKey(obj, 'Jmin')) awg.jmin = toIntMaybe(getAwgKey(obj, 'Jmin')) ?? 0;
-  if (hasAwgKey(obj, 'Jmax')) awg.jmax = toIntMaybe(getAwgKey(obj, 'Jmax')) ?? 0;
-  if (hasAwgKey(obj, 'S1')) awg.s1 = toIntMaybe(getAwgKey(obj, 'S1')) ?? 0;
-  if (hasAwgKey(obj, 'S2')) awg.s2 = toIntMaybe(getAwgKey(obj, 'S2')) ?? 0;
-  if (hasAwgKey(obj, 'S3')) awg.s3 = toIntMaybe(getAwgKey(obj, 'S3')) ?? 0;
-  if (hasAwgKey(obj, 'S4')) awg.s4 = toIntMaybe(getAwgKey(obj, 'S4')) ?? 0;
-  if (hasAwgKey(obj, 'H1')) awg.h1 = h1 ?? 0;
-  if (hasAwgKey(obj, 'H2')) awg.h2 = h2 ?? 0;
-  if (hasAwgKey(obj, 'H3')) awg.h3 = h3 ?? 0;
-  if (hasAwgKey(obj, 'H4')) awg.h4 = h4 ?? 0;
-
-  if (hasV15) {
-    awg.i1 = normalizeAwgValue(getAwgKey(obj, 'I1'));
-    if (hasAwgKey(obj, 'I2')) awg.i2 = normalizeAwgValue(getAwgKey(obj, 'I2'));
-    if (hasAwgKey(obj, 'I3')) awg.i3 = normalizeAwgValue(getAwgKey(obj, 'I3'));
-    if (hasAwgKey(obj, 'I4')) awg.i4 = normalizeAwgValue(getAwgKey(obj, 'I4'));
-    if (hasAwgKey(obj, 'I5')) awg.i5 = normalizeAwgValue(getAwgKey(obj, 'I5'));
-    if (hasAwgKey(obj, 'J1')) awg.j1 = normalizeAwgValue(getAwgKey(obj, 'J1'));
-    if (hasAwgKey(obj, 'J2')) awg.j2 = normalizeAwgValue(getAwgKey(obj, 'J2'));
-    if (hasAwgKey(obj, 'J3')) awg.j3 = normalizeAwgValue(getAwgKey(obj, 'J3'));
-    if (hasAwgKey(obj, 'Itime')) awg.itime = toIntMaybe(getAwgKey(obj, 'Itime')) ?? 0;
+  for (const spec of AWG_FIELD_SPECS) {
+    if (spec.v15 && !hasV15) continue;
+    const raw = get(spec.key);
+    if (raw !== undefined) awg[spec.out] = spec.parse(raw);
   }
+
+  // Protocol 2.0 is implied by the S3/S4 knobs or by a header given as a range.
+  const hasV20 =
+    get('S3') !== undefined || get('S4') !== undefined ||
+    ['h1', 'h2', 'h3', 'h4'].some(k => typeof awg[k] === 'string');
 
   return { awg, hasV20, hasV15 };
 }
@@ -875,7 +877,7 @@ function parseAmneziaAwgProxy(serverConfig, container) {
   const proxy = parseAmneziaWireGuardBaseProxy(serverConfig, protocolConfig, clientConfig, 'awg');
   if (!proxy) return null;
 
-  const { awg, hasV20, hasV15 } = collectAwgOptions(clientConfig);
+  const { awg, hasV20, hasV15 } = collectAwgOptions(awgLookup(clientConfig));
   const awgVersion = normalizeAwgVersion(protocolConfig.protocol_version, hasV20, hasV15);
   proxy.awgVersion = awgVersion;
   proxy['amnezia-wg-option'] = awg;
@@ -1002,14 +1004,17 @@ function parseWireGuardConfig(text) {
     if (!kv) continue;
     (section === 'i' ? iface : peer)[kv[1].trim()] = kv[2].trim();
   }
-  const privateKey = getAwgKey(iface, 'PrivateKey');
-  const publicKey = getAwgKey(peer, 'PublicKey');
-  const endpoint = getAwgKey(peer, 'Endpoint');
+  const ifaceGet = awgLookup(iface);
+  const peerGet = awgLookup(peer);
+
+  const privateKey = ifaceGet('PrivateKey');
+  const publicKey = peerGet('PublicKey');
+  const endpoint = peerGet('Endpoint');
   if (!privateKey || !publicKey || !endpoint) return null;
   const ep = endpoint.match(/^([^:]+):(\d+)$/);
   if (!ep) return null;
   const server = ep[1], port = +ep[2];
-  const address = getAwgKey(iface, 'Address');
+  const address = ifaceGet('Address');
   let ip = '10.0.0.2';
   let ipv6 = null;
   if (address) {
@@ -1019,7 +1024,7 @@ function parseWireGuardConfig(text) {
     if (v4) ip = v4;
     if (v6) ipv6 = v6;
   }
-  const isAmnezia = hasAnyAwgKey(iface);
+  const isAmnezia = hasAnyAwgKey(ifaceGet);
 
   const proxy = {
     name: (isAmnezia ? 'awg-' : 'wg-') + server,
@@ -1029,14 +1034,14 @@ function parseWireGuardConfig(text) {
     udp: true
   };
   if (ipv6) proxy.ipv6 = ipv6;
-  const mtu = toIntMaybe(getAwgKey(iface, 'MTU'));
+  const mtu = toIntMaybe(ifaceGet('MTU'));
   if (mtu !== null) proxy.mtu = mtu;
-  const psk = getAwgKey(peer, 'PresharedKey');
+  const psk = peerGet('PresharedKey');
   if (psk) proxy['pre-shared-key'] = psk;
-  const dns = getAwgKey(iface, 'DNS');
+  const dns = ifaceGet('DNS');
   if (dns) proxy.dns = [dns.split(',')[0].trim()];
   if (isAmnezia) {
-    const { awg, hasV20, hasV15 } = collectAwgOptions(iface);
+    const { awg, hasV20, hasV15 } = collectAwgOptions(ifaceGet);
     proxy.awgVersion = normalizeAwgVersion('', hasV20, hasV15);
     proxy['amnezia-wg-option'] = awg;
   }
@@ -1047,18 +1052,15 @@ function parseWireGuardConfig(text) {
 // Hysteria v1
 // ============================================================
 function parseHysteria(rawUrl) {
-  const u = parseUrlOrNull(rawUrl);
-  if (!u || u.protocol !== 'hysteria:') return null;
-  const server = u.hostname;
-  const port = Number(u.port);
-  if (!server || !Number.isFinite(port)) return null;
+  const base = parseShareLinkBase(rawUrl, ['hysteria'], { namePrefix: 'hysteria' });
+  if (!base) return null;
 
-  const p = u.searchParams;
+  const { params: p } = base;
   const proxy = {
-    name: u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `hysteria-${server}`,
+    name: base.name,
     type: 'hysteria',
-    server,
-    port
+    server: base.server,
+    port: base.port
   };
   const peer = p.get('peer');
   if (peer) proxy.sni = peer;
@@ -1138,21 +1140,13 @@ function parseSsr(rawUrl) {
 // those URLs are treated as subscription links by the configurator.
 // ============================================================
 function parseSocks(rawUrl) {
-  const u = parseUrlOrNull(rawUrl);
-  if (!u) return null;
-  const scheme = u.protocol.replace(':', '').toLowerCase();
-  if (!['socks', 'socks5', 'socks5h'].includes(scheme)) return null;
-  const server  = u.hostname;
-  const portStr = u.port;
-  if (!server || !portStr) return null;
-
-  const name = u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `${server}:${portStr}`;
+  const base = parseShareLinkBase(rawUrl, ['socks', 'socks5', 'socks5h'], { requirePort: true });
+  if (!base) return null;
 
   // Credentials may be plain or base64-encoded (concat as "user:pass" then try decode)
-  let username = decodeURIComponentSafe(u.username);
-  let password = decodeURIComponentSafe(u.password);
-  if (u.username && !u.password) {
-    const decoded = decodeBase64Compat(u.username);
+  let { username, password } = base;
+  if (username && !password) {
+    const decoded = decodeBase64Compat(base.url.username);
     if (decoded) {
       const idx = decoded.indexOf(':');
       if (idx >= 0) { username = decoded.slice(0, idx); password = decoded.slice(idx + 1); }
@@ -1161,10 +1155,10 @@ function parseSocks(rawUrl) {
   }
 
   return {
-    name,
+    name: base.name,
     type: 'socks5',
-    server,
-    port: +portStr,
+    server: base.server,
+    port: base.port,
     username,
     password,
     'skip-cert-verify': true
@@ -1176,23 +1170,17 @@ function parseSocks(rawUrl) {
 // https://github.com/anytls/anytls-go/blob/main/docs/uri_scheme.md
 // ============================================================
 function parseAnyTls(rawUrl) {
-  const u = parseUrlOrNull(rawUrl);
-  if (!u || u.protocol !== 'anytls:') return null;
-  const server  = u.hostname;
-  const portStr = u.port;
-  if (!server || !portStr) return null;
+  const base = parseShareLinkBase(rawUrl, ['anytls'], { requirePort: true });
+  if (!base) return null;
 
-  const username = decodeURIComponentSafe(u.username);
-  const password = decodeURIComponentSafe(u.password) || username;
-  const p = u.searchParams;
-  const name = u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : `${server}:${portStr}`;
+  const { params: p, username } = base;
   return {
-    name,
+    name: base.name,
     type: 'anytls',
-    server,
-    port: +portStr,
+    server: base.server,
+    port: base.port,
     username,
-    password,
+    password: base.password || username,
     sni: p.get('sni') || '',
     fingerprint: p.get('hpkp') || '',
     'skip-cert-verify': p.get('insecure') === '1',
@@ -1204,14 +1192,10 @@ function parseAnyTls(rawUrl) {
 // Mieru
 // ============================================================
 function parseMieru(rawUrl) {
-  const u = parseUrlOrNull(rawUrl);
-  if (!u || u.protocol !== 'mierus:') return null;
-  const server = u.hostname;
-  if (!server) return null;
+  const base = parseShareLinkBase(rawUrl, ['mierus']);
+  if (!base) return null;
 
-  const username = decodeURIComponentSafe(u.username);
-  const password = decodeURIComponentSafe(u.password);
-  const p = u.searchParams;
+  const { params: p, server, username, password } = base;
   const portList     = p.getAll('port');
   const protocolList = p.getAll('protocol');
   if (!portList.length || portList.length !== protocolList.length) return null;
@@ -1219,7 +1203,8 @@ function parseMieru(rawUrl) {
   // Take first port/protocol pair (same as first iteration in Go)
   const port     = portList[0];
   const protocol = protocolList[0];
-  const baseName = u.hash ? decodeURIComponentSafe(u.hash.slice(1)) : (p.get('profile') || server);
+  // Mieru carries its ports in the query string, so the name is built here rather than by the base helper.
+  const baseName = shareLinkName(base.url, p.get('profile') || server);
   const name = `${baseName}:${port}/${protocol}`;
 
   const proxy = {
@@ -1245,23 +1230,35 @@ function parseMieru(rawUrl) {
   return proxy;
 }
 
+/**
+ * Supported share-link schemes. `http`/`https` are deliberately absent —
+ * the configurator treats those as subscription URLs, not proxies.
+ */
+const PROXY_URL_PARSERS = {
+  vpn: line => withTimeoutOrNull(parseAmneziaVpnLink(line), 10000),
+  vless: parseVless,
+  vmess: parseVmess,
+  ss: parseSS,
+  ssr: parseSsr,
+  trojan: parseTrojan,
+  hysteria2: parseHysteria2,
+  hy2: parseHysteria2,
+  hysteria: parseHysteria,
+  tuic: parseTuic,
+  anytls: parseAnyTls,
+  mierus: parseMieru,
+  socks: parseSocks,
+  socks5: parseSocks,
+  socks5h: parseSocks
+};
+
 async function parseProxyUrl(line) {
   line = line.trim();
-  if (!line) return null;
-  const lower = line.toLowerCase();
-  if (lower.startsWith('vpn://')) return await withTimeoutOrNull(parseAmneziaVpnLink(line), 10000);
-  if (lower.startsWith('vless://')) return parseVless(line);
-  if (lower.startsWith('vmess://')) return parseVmess(line);
-  if (lower.startsWith('ss://')) return parseSS(line);
-  if (lower.startsWith('ssr://')) return parseSsr(line);
-  if (lower.startsWith('trojan://')) return parseTrojan(line);
-  if (lower.startsWith('hysteria2://') || lower.startsWith('hy2://')) return parseHysteria2(line);
-  if (lower.startsWith('hysteria://')) return parseHysteria(line);
-  if (lower.startsWith('tuic://')) return parseTuic(line);
-  if (lower.startsWith('anytls://')) return parseAnyTls(line);
-  if (lower.startsWith('mierus://')) return parseMieru(line);
-  if (/^socks5?h?:\/\//i.test(line)) return parseSocks(line);
-  return null;
+  const scheme = (line.match(/^([a-z][a-z0-9+.-]*):\/\//i)?.[1] || '').toLowerCase();
+  const parse = Object.prototype.hasOwnProperty.call(PROXY_URL_PARSERS, scheme)
+    ? PROXY_URL_PARSERS[scheme]
+    : null;
+  return parse ? await parse(line) : null;
 }
 
 function parseSubscriptionUrl(line) {

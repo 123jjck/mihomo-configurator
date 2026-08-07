@@ -62,6 +62,9 @@ const exportedNames = [
   'createsDialerProxyCycle',
   'removeProxy',
   'moveProxy',
+  'removeRule',
+  'moveRule',
+  'changeRuleTarget',
   'setLanguage'
 ];
 

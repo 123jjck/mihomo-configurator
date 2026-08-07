@@ -15,12 +15,19 @@ function stripProxyForExport(proxy) {
   return copy;
 }
 
-function ruleSetFlags() {
-  return {
-    telegram: state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'telegram'),
-    discordVoice: state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'discord-voice'),
-    ruBlocked: state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'ru-blocked')
-  };
+/**
+ * Rule-providers emitted whenever a RULE-SET rule of the same name is present.
+ * Shared by buildAutoRuleProviders() and isAutoRuleProviderName() so the
+ * generated set and the set treated as ours can never drift apart.
+ */
+const FLAG_RULE_PROVIDERS = [
+  { name: 'telegram',      behavior: 'ipcidr', url: () => telegramProviderUrl() },
+  { name: 'discord-voice', behavior: 'ipcidr', url: () => discordVoiceProviderUrl() },
+  { name: 'ru-blocked',    behavior: 'domain', url: () => ruBlockedProviderUrl() }
+];
+
+function hasRuleSet(payload) {
+  return state.rules.some(r => r.type === 'RULE-SET' && r.payload === payload);
 }
 
 function geositeProviderNames() {
@@ -33,7 +40,6 @@ function geositeProviderNames() {
 
 /** Auto-generated rule-providers for geosite / CDN / telegram / discord-voice / ru-blocked. */
 function buildAutoRuleProviders() {
-  const flags = ruleSetFlags();
   const providers = {};
 
   for (const name of geositeProviderNames()) {
@@ -56,37 +62,28 @@ function buildAutoRuleProviders() {
     };
   }
 
-  if (flags.telegram) {
-    providers.telegram = {
-      behavior: 'ipcidr',
+  for (const provider of FLAG_RULE_PROVIDERS) {
+    if (!hasRuleSet(provider.name)) continue;
+    providers[provider.name] = {
+      behavior: provider.behavior,
       type: 'http',
-      url: telegramProviderUrl(),
-      interval: 86400,
-      format: 'text'
-    };
-  }
-
-  if (flags.discordVoice) {
-    providers['discord-voice'] = {
-      behavior: 'ipcidr',
-      type: 'http',
-      url: discordVoiceProviderUrl(),
-      interval: 86400,
-      format: 'text'
-    };
-  }
-
-  if (flags.ruBlocked) {
-    providers['ru-blocked'] = {
-      behavior: 'domain',
-      type: 'http',
-      url: ruBlockedProviderUrl(),
+      url: provider.url(),
       interval: 86400,
       format: 'text'
     };
   }
 
   return providers;
+}
+
+/**
+ * Names owned by buildAutoRuleProviders(). They are regenerated on every export,
+ * so copies inherited from an imported config are dropped rather than merged.
+ */
+function isAutoRuleProviderName(name) {
+  if (name.startsWith('geosite-')) return true;
+  if (FLAG_RULE_PROVIDERS.some(provider => provider.name === name)) return true;
+  return name === 'cdn-all' || CDN_PROVIDERS.some(p => 'cdn-' + p.id === name);
 }
 
 function buildRulesList() {
@@ -186,7 +183,6 @@ function keepAliveForDevice() {
 }
 
 function generateFresh() {
-  const flags = ruleSetFlags();
   const isRouterConfig = state.device === 'router';
   const keepAlive = keepAliveForDevice();
   const autoRuleProviders = buildAutoRuleProviders();
@@ -228,7 +224,7 @@ function generateFresh() {
     tracing: false
   };
 
-  config.sniffer = buildSnifferConfig(flags.telegram);
+  config.sniffer = buildSnifferConfig(hasRuleSet('telegram'));
 
   config.proxies = state.proxies.map(stripProxyForExport);
 
@@ -253,7 +249,6 @@ function generateFresh() {
 
 function generateFromImported() {
   const config = structuredClone(state.importedRawConfig);
-  const flags = ruleSetFlags();
   const keepAlive = keepAliveForDevice();
 
   config.ipv6 = state.ipv6;
@@ -310,15 +305,8 @@ function generateFromImported() {
   // Rebuild rule-providers: preserve original non-auto ones + auto-generated
   const originalRuleProviders = state.importedRawConfig['rule-providers'] || {};
   const newRuleProviders = {};
-  const knownAutoNames = new Set();
-  for (const p of CDN_PROVIDERS) knownAutoNames.add('cdn-' + p.id);
-  knownAutoNames.add('cdn-all');
-  knownAutoNames.add('telegram');
-  knownAutoNames.add('discord-voice');
-  knownAutoNames.add('ru-blocked');
-
   for (const [name, rp] of Object.entries(originalRuleProviders)) {
-    if (!knownAutoNames.has(name) && !name.startsWith('geosite-')) {
+    if (!isAutoRuleProviderName(name)) {
       newRuleProviders[name] = structuredClone(rp);
     }
   }
@@ -333,7 +321,7 @@ function generateFromImported() {
   config.rules = buildRulesList();
 
   if (config.sniffer) {
-    if (flags.telegram) {
+    if (hasRuleSet('telegram')) {
       config.sniffer['skip-dst-address'] = [...TELEGRAM_SNIFFER_SKIP_DST];
     } else {
       delete config.sniffer['skip-dst-address'];
@@ -480,34 +468,23 @@ function importConfig(yamlText) {
   if (Array.isArray(doc.rules)) {
     for (const ruleStr of doc.rules) {
       const parts = String(ruleStr).split(',');
-      if (parts.length >= 2) {
-        const type = parts[0].trim();
-        if (type === 'MATCH') {
-          state.matchTarget = parts[1].trim();
-          continue;
-        }
-        // Skip private network rules (they're auto-added)
-        if (type === 'IP-CIDR' && ['192.168.0.0/16', '10.0.0.0/8', '172.16.0.0/12', '127.0.0.0/8'].includes(parts[1].trim()) && parts[2] && parts[2].trim() === 'DIRECT') {
-          continue;
-        }
-        if (parts.length >= 3) {
-          state.rules.push({
-            type: type,
-            payload: parts[1].trim(),
-            target: parts.slice(2).join(',').trim()
-          });
-        } else {
-          state.rules.push({
-            type: type,
-            payload: parts[1].trim(),
-            target: 'Proxy'
-          });
-        }
+      if (parts.length < 2) continue;
+
+      const type = parts[0].trim();
+      const payload = parts[1].trim();
+      if (type === 'MATCH') {
+        state.matchTarget = payload;
+        continue;
       }
+      const target = parts.length >= 3 ? parts.slice(2).join(',').trim() : 'Proxy';
+      // Private network rules are re-added by buildRulesList(), so don't import copies.
+      if (PRIVATE_NETWORK_RULES.includes(`${type},${payload},${target}`)) continue;
+
+      state.rules.push({ type, payload, target });
     }
   }
 
-  detectActivePresets();
+  commitRules();
 
   document.getElementById('import-btn').style.display = 'none';
   document.getElementById('import-reset-btn').style.display = '';
@@ -516,38 +493,6 @@ function importConfig(yamlText) {
 
   const matchEl = document.getElementById('match-target');
   if (matchEl) matchEl.value = state.matchTarget;
-}
-
-function detectActivePresets() {
-  state.activeServicePresets = new Set();
-  state.activeExceptionPresets = new Set();
-  state.activeOtherPresets = new Set();
-  state.activeCdnProviders = new Set();
-
-  for (const [presets, activeSet] of [
-    [SERVICE_PRESETS, state.activeServicePresets],
-    [EXCEPTION_PRESETS, state.activeExceptionPresets],
-    [OTHER_PRESETS, state.activeOtherPresets]
-  ]) {
-    for (const [id, preset] of Object.entries(presets)) {
-      const allMatch = preset.rules.every(pr =>
-        state.rules.some(r => r.type === pr.type && r.payload === pr.payload && r.target === pr.target)
-      );
-      if (allMatch) activeSet.add(id);
-    }
-  }
-
-  // Every cdn-* rule must be detected, even when cdn-all is present too:
-  // a provider that stays undetected gets no rule-provider and leaves the
-  // imported RULE-SET rule dangling.
-  if (state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'cdn-all')) {
-    state.activeCdnProviders.add('all');
-  }
-  for (const p of CDN_PROVIDERS) {
-    if (state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'cdn-' + p.id)) {
-      state.activeCdnProviders.add(p.id);
-    }
-  }
 }
 
 function resetImport() {

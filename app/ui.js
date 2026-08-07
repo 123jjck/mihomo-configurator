@@ -436,6 +436,52 @@ function presetLabelOf(p) {
   return p.labelKey ? t(p.labelKey) : p.label;
 }
 
+function isCdnRule(rule) {
+  return rule.type === 'RULE-SET' && rule.payload.startsWith('cdn-');
+}
+
+/** A preset counts as active exactly when every rule it contributes is present. */
+function presetRulesActive(preset) {
+  return preset.rules.every(pr =>
+    state.rules.some(r => r.type === pr.type && r.payload === pr.payload && r.target === pr.target)
+  );
+}
+
+/**
+ * Recompute which presets are highlighted. The active sets are a cache derived
+ * from state.rules, never a second source of truth — that way editing or
+ * deleting a rule by hand can't leave a preset button stuck in the on state.
+ */
+function detectActivePresets() {
+  for (const [presets, key] of [
+    [SERVICE_PRESETS, 'activeServicePresets'],
+    [EXCEPTION_PRESETS, 'activeExceptionPresets'],
+    [OTHER_PRESETS, 'activeOtherPresets']
+  ]) {
+    state[key] = new Set(
+      Object.entries(presets)
+        .filter(([, preset]) => presetRulesActive(preset))
+        .map(([id]) => id)
+    );
+  }
+
+  // Every cdn-* rule must be detected, even when cdn-all is present too:
+  // a provider that stays undetected gets no rule-provider and leaves the
+  // imported RULE-SET rule dangling.
+  const cdn = new Set();
+  if (state.rules.some(r => isCdnRule(r) && r.payload === 'cdn-all')) cdn.add('all');
+  for (const p of CDN_PROVIDERS) {
+    if (state.rules.some(r => isCdnRule(r) && r.payload === 'cdn-' + p.id)) cdn.add(p.id);
+  }
+  state.activeCdnProviders = cdn;
+}
+
+/** Restore invariants and refresh derived state. Call after every change to state.rules. */
+function commitRules() {
+  prioritizeTelegramRules();
+  detectActivePresets();
+}
+
 function groupSelectionState(items, activeSet) {
   const n = items.filter(id => activeSet.has(id)).length;
   if (n === 0) return '';
@@ -452,20 +498,10 @@ function cdnSelectionState() {
   return groupSelectionState(CDN_PROVIDERS.map(p => p.id), state.activeCdnProviders);
 }
 
-function clearAllCdn() {
-  state.activeCdnProviders.clear();
-  state.rules = state.rules.filter(r => !(r.type === 'RULE-SET' && r.payload.startsWith('cdn-')));
-}
-
-function setCdnAll() {
-  state.activeCdnProviders = new Set(['all']);
-  state.rules = state.rules.filter(r => !(r.type === 'RULE-SET' && r.payload.startsWith('cdn-')));
-  state.rules.push({type: 'RULE-SET', payload: 'cdn-all', target: 'Proxy'});
-}
-
-function syncCdnRulesFromActive() {
-  state.rules = state.rules.filter(r => !(r.type === 'RULE-SET' && r.payload.startsWith('cdn-')));
-  for (const id of state.activeCdnProviders) {
+/** Replace every cdn-* rule with one per given id ('all' meaning the combined list). */
+function setCdnRules(ids) {
+  state.rules = state.rules.filter(r => !isCdnRule(r));
+  for (const id of ids) {
     state.rules.push({type: 'RULE-SET', payload: 'cdn-' + id, target: 'Proxy'});
   }
 }
@@ -539,52 +575,48 @@ function renderAllPresets() {
   }
 }
 
+/** Add or drop a preset's rules. Callers commit and re-render once they are done. */
 function setPresetActive(category, id, wantActive) {
-  const [presets, activeSet] = presetCategoryConfig(category);
-  const isActive = activeSet.has(id);
-  if (wantActive === isActive) return;
+  const [presets] = presetCategoryConfig(category);
+  const preset = presets[id];
+  if (wantActive === presetRulesActive(preset)) return;
 
   if (!wantActive) {
-    activeSet.delete(id);
-    const presetRules = presets[id].rules;
     state.rules = state.rules.filter(r =>
-      !presetRules.some(pr => pr.type === r.type && pr.payload === r.payload && pr.target === r.target)
+      !preset.rules.some(pr => pr.type === r.type && pr.payload === r.payload && pr.target === r.target)
     );
     return;
   }
 
-  activeSet.add(id);
-  for (const r of presets[id].rules) {
-    if (!state.rules.some(er => er.type === r.type && er.payload === r.payload)) {
-      const firstCdnRule = state.rules.findIndex(rule => rule.type === 'RULE-SET' && rule.payload.startsWith('cdn-'));
-      if (category === 'exceptions' && firstCdnRule !== -1) state.rules.splice(firstCdnRule, 0, {...r});
-      else state.rules.push({...r});
-    }
+  for (const r of preset.rules) {
+    if (state.rules.some(er => er.type === r.type && er.payload === r.payload)) continue;
+    // Exceptions must outrank CDN ranges they overlap with, so insert them above.
+    const firstCdnRule = state.rules.findIndex(isCdnRule);
+    if (category === 'exceptions' && firstCdnRule !== -1) state.rules.splice(firstCdnRule, 0, {...r});
+    else state.rules.push({...r});
   }
 }
 
 function togglePreset(category, id) {
-  const [, activeSet] = presetCategoryConfig(category);
-  setPresetActive(category, id, !activeSet.has(id));
+  const [presets] = presetCategoryConfig(category);
+  setPresetActive(category, id, !presetRulesActive(presets[id]));
+  commitRules();
   renderAllPresets();
   renderRules();
 }
 
 function togglePresetGroup(category, groupId) {
-  const [, activeSet, groups] = presetCategoryConfig(category);
+  const [presets, , groups] = presetCategoryConfig(category);
   const group = groups.find(g => g.id === groupId);
   if (!group) return;
 
   if (group.type === 'cdn') {
-    if (cdnSelectionState() === 'active') clearAllCdn();
-    else setCdnAll();
-    renderAllPresets();
-    renderRules();
-    return;
+    setCdnRules(cdnSelectionState() === 'active' ? [] : ['all']);
+  } else {
+    const allOn = group.items.every(id => presetRulesActive(presets[id]));
+    for (const id of group.items) setPresetActive(category, id, !allOn);
   }
-
-  const allOn = group.items.every(id => activeSet.has(id));
-  for (const id of group.items) setPresetActive(category, id, !allOn);
+  commitRules();
   renderAllPresets();
   renderRules();
 }
@@ -603,20 +635,18 @@ function closePresetDropdowns() {
 }
 
 function toggleCdn(id) {
-  if (state.activeCdnProviders.has('all')) {
-    state.activeCdnProviders = new Set(CDN_PROVIDERS.map(p => p.id).filter(p => p !== id));
-    syncCdnRulesFromActive();
-  } else if (state.activeCdnProviders.has(id)) {
-    state.activeCdnProviders.delete(id);
-    state.rules = state.rules.filter(r => !(r.type === 'RULE-SET' && r.payload === 'cdn-' + id));
+  const active = state.activeCdnProviders;
+  if (active.has('all')) {
+    // Unchecking one entry expands the combined list back into individual rules.
+    setCdnRules(CDN_PROVIDERS.map(p => p.id).filter(p => p !== id));
+  } else if (active.has(id)) {
+    setCdnRules([...active].filter(p => p !== id));
   } else {
-    state.activeCdnProviders.add(id);
-    const ids = CDN_PROVIDERS.map(p => p.id);
-    if (ids.every(p => state.activeCdnProviders.has(p))) setCdnAll();
-    else if (!state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'cdn-' + id)) {
-      state.rules.push({type: 'RULE-SET', payload: 'cdn-' + id, target: 'Proxy'});
-    }
+    const next = [...active, id];
+    const complete = CDN_PROVIDERS.every(p => next.includes(p.id));
+    setCdnRules(complete ? ['all'] : next);
   }
+  commitRules();
   renderAllPresets();
   renderRules();
 }
@@ -656,55 +686,74 @@ function addRule() {
   if (!payload) { toast(t('ruleValueRequired'), 'error'); return; }
   state.rules.push({type, payload, target});
   document.getElementById('rule-payload').value = '';
+  commitRules();
+  renderAllPresets();
   renderRules();
 }
 
 function removeRule(index) {
-  const removed = state.rules[index];
   state.rules.splice(index, 1);
-  if (removed.type === 'RULE-SET' && removed.payload.startsWith('cdn-')) {
-    state.activeCdnProviders.delete(removed.payload.slice(4));
-    renderAllPresets();
-  }
+  commitRules();
+  renderAllPresets();
   renderRules();
 }
 
 function moveRule(index, dir) {
   const newIdx = index + dir;
   if (newIdx < 0 || newIdx >= state.rules.length) return;
+  // Pinned rules keep their position, so refuse moves that would disturb them.
+  if (isPinnedRule(state.rules[index]) || isPinnedRule(state.rules[newIdx])) return;
   [state.rules[index], state.rules[newIdx]] = [state.rules[newIdx], state.rules[index]];
+  commitRules();
   renderRules();
 }
 
+/**
+ * Telegram is matched by an ipcidr provider whose ranges overlap the CDN lists,
+ * so it has to be evaluated first for connections to stay stable. The rule is
+ * pinned to the top of the list and cannot be reordered.
+ */
+function isPinnedRule(rule) {
+  return rule.type === 'RULE-SET' && rule.payload === 'telegram';
+}
+
 function prioritizeTelegramRules() {
-  const isTelegramRule = r => r.type === 'RULE-SET' && r.payload === 'telegram';
-  const telegramRules = state.rules.filter(isTelegramRule);
-  if (!telegramRules.length) return;
-  const otherRules = state.rules.filter(r => !isTelegramRule(r));
-  state.rules = [...telegramRules, ...otherRules];
+  const pinned = state.rules.filter(isPinnedRule);
+  if (!pinned.length) return;
+  state.rules = [...pinned, ...state.rules.filter(r => !isPinnedRule(r))];
 }
 
 function renderRules() {
-  prioritizeTelegramRules();
   const list = document.getElementById('rules-list');
   if (!state.rules.length) {
     list.innerHTML = `<div class="empty">${escHtml(t('emptyRules'))}</div>`;
     return;
   }
+
+  const opts = buildTargetOptions(true);
+  const upTitle = escHtml(t('moveUpTitle'));
+  const downTitle = escHtml(t('moveDownTitle'));
+  const removeTitle = escHtml(t('removeTitle'));
+  const pinnedCount = state.rules.filter(isPinnedRule).length;
+
   list.innerHTML = state.rules.map((r, i) => {
-    const opts = buildTargetOptions(true);
+    const pinned = isPinnedRule(r);
+    const canMoveUp = !pinned && i > pinnedCount;
+    const canMoveDown = !pinned && i < state.rules.length - 1;
     return `<div class="rule-item">` +
       `<span class="rule-text">${escHtml(r.type)},${escHtml(r.payload)}</span>` +
       `<select class="rule-target-select" onchange="changeRuleTarget(${i},this.value)">${opts}</select>` +
       `<div class="rule-actions">` +
-      `<button onclick="moveRule(${i},-1)" title="${escHtml(t('moveUpTitle'))}">&#8593;</button>` +
-      `<button onclick="moveRule(${i},1)" title="${escHtml(t('moveDownTitle'))}">&#8595;</button>` +
-      `<button onclick="removeRule(${i})" title="${escHtml(t('removeTitle'))}">&times;</button>` +
+      `<button onclick="moveRule(${i},-1)" title="${upTitle}" ${canMoveUp ? '' : 'disabled'}>&#8593;</button>` +
+      `<button onclick="moveRule(${i},1)" title="${downTitle}" ${canMoveDown ? '' : 'disabled'}>&#8595;</button>` +
+      `<button onclick="removeRule(${i})" title="${removeTitle}">&times;</button>` +
       `</div></div>`;
   }).join('');
-  // Set selected values after innerHTML is set
+
+  // Selected values can only be applied once the options exist in the DOM.
+  const selects = list.querySelectorAll('.rule-target-select');
   state.rules.forEach((r, i) => {
-    const sel = list.querySelectorAll('.rule-target-select')[i];
+    const sel = selects[i];
     if (sel) { sel.value = r.target; sel.style.color = targetColor(r.target); }
   });
 }
@@ -719,4 +768,8 @@ function changeRuleTarget(index, value) {
   state.rules[index].target = value;
   const sel = document.querySelectorAll('#rules-list .rule-target-select')[index];
   if (sel) sel.style.color = targetColor(value);
+  // Retargeting a rule can make its preset stop matching; refresh the badges
+  // without re-rendering the list, which would drop focus from this select.
+  commitRules();
+  renderAllPresets();
 }
