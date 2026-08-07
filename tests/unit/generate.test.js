@@ -155,10 +155,14 @@ describe('mihomo YAML generation', () => {
   });
 
   it.each([
+    ['apple', 'geosite-apple', 'apple'],
     ['steam', 'geosite-steam', 'steam'],
+    ['epicgames', 'geosite-epicgames', 'epicgames'],
+    ['nintendo', 'geosite-nintendo', 'nintendo'],
+    ['ea', 'geosite-ea', 'ea'],
     ['mihoyo', 'geosite-mihoyo', 'mihoyo'],
-    ['kurogames', 'geosite-kurogames', 'kurogames'],
-    ['twitch', 'geosite-twitch', 'twitch']
+    ['twitch', 'geosite-twitch', 'twitch'],
+    ['kurogames', 'geosite-kurogames', 'kurogames']
   ])('adds the %s CDN exception as a direct geosite provider', (presetId, providerName, siteName) => {
     app.togglePreset('exceptions', presetId);
 

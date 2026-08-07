@@ -99,8 +99,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica N
 .header p{color:var(--text-subtle);font-size:13px;margin-top:2px}
 a{color:var(--accent)}
 .header a{color:var(--accent)}
-.github-link{position:absolute;top:0;left:0;width:34px;height:34px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg-elevated);color:var(--text-muted);display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s,transform .15s;text-decoration:none}
-.github-link:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}
+.github-link{position:absolute;top:0;left:0;width:34px;height:34px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg-elevated);color:var(--text-muted);display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s;text-decoration:none}
+.github-link:hover{border-color:var(--accent);color:var(--accent)}
 .header-left{position:absolute;top:0;left:42px;display:flex;align-items:center;gap:8px}
 .import-btn.btn-sm{height:34px;padding:0 14px;line-height:1;border-radius:10px;box-sizing:border-box}
 .import-btn{white-space:nowrap}
