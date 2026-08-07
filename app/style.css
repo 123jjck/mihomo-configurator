@@ -189,10 +189,35 @@ textarea.field-input{resize:vertical;font-family:'SF Mono',Monaco,Consolas,'Libe
 .proxy-chain{display:block;margin-top:2px;color:var(--text-subtle);font-size:11px}
 
 /* Presets */
-.presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
-.preset-btn{padding:8px 16px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg-elevated);cursor:pointer;font-size:13px;font-weight:500;color:var(--text-muted);transition:all .15s;font-family:inherit}
+.presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;align-items:center}
+.preset-btn{height:36px;padding:0 16px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg-elevated);cursor:pointer;font-size:13px;font-weight:500;line-height:1;color:var(--text-muted);transition:all .15s;font-family:inherit;display:inline-flex;align-items:center;box-sizing:border-box}
 .preset-btn:hover{border-color:var(--accent);color:var(--accent)}
 .preset-btn.active{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.preset-group{position:relative}
+.preset-group-btn{display:inline-flex;align-items:stretch;height:36px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg-elevated);overflow:hidden;transition:all .15s;box-sizing:border-box}
+.preset-group-btn:hover{border-color:var(--accent)}
+.preset-group-btn:hover .preset-group-main,.preset-group-btn:hover .preset-group-chevron{color:var(--accent)}
+.preset-group-btn.active{background:var(--accent);border-color:var(--accent)}
+.preset-group-btn.active .preset-group-main,.preset-group-btn.active .preset-group-chevron{color:var(--on-accent)}
+.preset-group-btn.active .preset-group-chevron{border-left-color:rgba(255,255,255,.35)}
+.preset-group-btn.partial{border-color:var(--accent);background:var(--accent-soft)}
+.preset-group-btn.partial .preset-group-main,.preset-group-btn.partial .preset-group-chevron{color:var(--accent)}
+.preset-group-btn.partial .preset-group-chevron{border-left-color:var(--accent)}
+.preset-group-main,.preset-group-chevron{border:none;background:transparent;cursor:pointer;font-size:13px;font-weight:500;color:var(--text-muted);font-family:inherit;transition:color .15s;line-height:1}
+.preset-group-main{padding:0 14px 0 16px}
+.preset-group-chevron{padding:0 9px 0 8px;display:inline-flex;align-items:center;justify-content:center;border-left:1px solid var(--border);color:var(--text-muted);margin-left:2px}
+.preset-group.open .preset-group-chevron svg{transform:rotate(180deg)}
+.preset-group-chevron svg{transition:transform .15s;display:block}
+.preset-dropdown{display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:20;min-width:100%;width:max-content;max-width:280px;max-height:min(320px,50vh);overflow-y:auto;padding:6px;background:var(--bg-elevated);border:1.5px solid var(--border);border-radius:10px;box-shadow:var(--shadow-toast);flex-direction:column;gap:2px}
+.preset-group.open .preset-dropdown{display:flex}
+.preset-dd-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 12px;border:none;border-radius:7px;background:transparent;cursor:pointer;font-size:13px;font-weight:500;color:var(--text-muted);font-family:inherit;transition:background .15s,color .15s}
+.preset-dd-item:hover{background:var(--bg-muted-hover);color:var(--accent)}
+.preset-dd-item.active{background:var(--accent-soft);color:var(--accent)}
+.preset-dd-check{flex-shrink:0;width:16px;height:16px;border:1.5px solid var(--border);border-radius:4px;background:var(--bg-elevated);display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s,background .15s,box-shadow .15s;box-sizing:border-box}
+.preset-dd-item:hover .preset-dd-check{border-color:var(--accent)}
+.preset-dd-item.active .preset-dd-check{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.preset-dd-check svg{display:block;opacity:0;transform:scale(.85);transition:opacity .12s,transform .12s}
+.preset-dd-item.active .preset-dd-check svg{opacity:1;transform:scale(1)}
 
 /* Rule Form */
 .rule-form{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
