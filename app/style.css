@@ -233,6 +233,8 @@ textarea.field-input{resize:vertical;font-family:'SF Mono',Monaco,Consolas,'Libe
 .rule-actions{display:flex;gap:2px}
 .rule-actions button{background:none;border:none;cursor:pointer;color:var(--text-disabled);font-size:14px;padding:2px 4px;line-height:1;transition:color .15s;border-radius:4px}
 .rule-actions button:hover{color:var(--text-muted);background:var(--bg-soft)}
+.rule-actions button:disabled{opacity:.35;cursor:not-allowed}
+.rule-actions button:disabled:hover{color:var(--text-disabled);background:none}
 .match-rule{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--bg-muted-hover);border-radius:9px;margin-top:10px;font-size:13px;font-weight:500;color:var(--text-muted)}
 .match-rule select{width:auto;padding:6px 10px;font-size:13px}
 
