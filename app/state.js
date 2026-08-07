@@ -337,10 +337,14 @@ const OTHER_PRESETS = {
 };
 
 const EXCEPTION_PRESETS = {
+  apple:     { label: 'Apple', rules: [{type:'RULE-SET',payload:'geosite-apple',target:'DIRECT'}] },
   steam:     { label: 'Steam', rules: [{type:'RULE-SET',payload:'geosite-steam',target:'DIRECT'}] },
+  epicgames: { label: 'Epic Games', rules: [{type:'RULE-SET',payload:'geosite-epicgames',target:'DIRECT'}] },
+  nintendo:  { label: 'Nintendo', rules: [{type:'RULE-SET',payload:'geosite-nintendo',target:'DIRECT'}] },
+  ea:        { label: 'Electronic Arts', rules: [{type:'RULE-SET',payload:'geosite-ea',target:'DIRECT'}] },
   mihoyo:    { label: 'miHoYo', rules: [{type:'RULE-SET',payload:'geosite-mihoyo',target:'DIRECT'}] },
-  kurogames: { label: 'Kuro Games (Wuthering Waves)', rules: [{type:'RULE-SET',payload:'geosite-kurogames',target:'DIRECT'}] },
-  twitch:    { label: 'Twitch', rules: [{type:'RULE-SET',payload:'geosite-twitch',target:'DIRECT'}] }
+  twitch:    { label: 'Twitch', rules: [{type:'RULE-SET',payload:'geosite-twitch',target:'DIRECT'}] },
+  kurogames: { label: 'Kuro Games (Wuthering Waves)', rules: [{type:'RULE-SET',payload:'geosite-kurogames',target:'DIRECT'}] }
 };
 
 const CDN_PROVIDERS = [

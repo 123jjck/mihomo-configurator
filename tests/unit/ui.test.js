@@ -56,7 +56,7 @@ describe('UI state helpers', () => {
     const exceptionLabels = [...ctx.document.querySelectorAll('#presets-exceptions button')].map(button => button.textContent);
     const otherLabels = [...ctx.document.querySelectorAll('#presets-other button')].map(button => button.textContent);
 
-    expect(exceptionLabels).toEqual(['Steam', 'miHoYo', 'Kuro Games (Wuthering Waves)', 'Twitch']);
+    expect(exceptionLabels).toEqual(['Apple', 'Steam', 'Epic Games', 'Nintendo', 'Electronic Arts', 'miHoYo', 'Twitch', 'Kuro Games (Wuthering Waves)']);
     expect(otherLabels).toEqual(['Заблокированные сайты', 'RU трафик напрямую']);
     expect(ctx.document.getElementById('rules-exceptions-hint').textContent).toContain('проксировании CDN');
   });
