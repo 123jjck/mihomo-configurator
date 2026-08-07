@@ -154,6 +154,22 @@ describe('mihomo YAML generation', () => {
     );
   });
 
+  it('defines a provider for every CDN rule when an imported config mixes cdn-all with individual providers', () => {
+    app.importConfig(`
+mode: rule
+rules:
+  - RULE-SET,cdn-all,Proxy
+  - RULE-SET,cdn-cloudflare,Proxy
+  - MATCH,DIRECT
+`);
+
+    const doc = yaml.load(app.generateConfig());
+
+    for (const rule of doc.rules.filter(r => r.startsWith('RULE-SET,'))) {
+      expect(doc['rule-providers']).toHaveProperty(rule.split(',')[1]);
+    }
+  });
+
   it.each([
     ['apple', 'geosite-apple', 'apple'],
     ['steam', 'geosite-steam', 'steam'],

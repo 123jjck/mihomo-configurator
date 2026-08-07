@@ -537,13 +537,15 @@ function detectActivePresets() {
     }
   }
 
+  // Every cdn-* rule must be detected, even when cdn-all is present too:
+  // a provider that stays undetected gets no rule-provider and leaves the
+  // imported RULE-SET rule dangling.
   if (state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'cdn-all')) {
     state.activeCdnProviders.add('all');
-  } else {
-    for (const p of CDN_PROVIDERS) {
-      if (state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'cdn-' + p.id)) {
-        state.activeCdnProviders.add(p.id);
-      }
+  }
+  for (const p of CDN_PROVIDERS) {
+    if (state.rules.some(r => r.type === 'RULE-SET' && r.payload === 'cdn-' + p.id)) {
+      state.activeCdnProviders.add(p.id);
     }
   }
 }
