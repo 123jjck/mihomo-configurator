@@ -758,21 +758,37 @@ function toIntOrRangeMaybe(v) {
   return `${m[1]}-${m[2]}`;
 }
 
-function normalizeAwgVersion(rawVersion, hasV20, hasV15) {
+/**
+ * Resolve the AmneziaWG generation. An explicit version from the source wins;
+ * otherwise it is inferred from which knobs are present. A source that declares
+ * plain "3" still reports 3.1 when it carries a 3.1-only knob, because the two
+ * releases share one wire protocol and differ only by these extra options.
+ */
+function normalizeAwgVersion(rawVersion, flags) {
   const v = String(rawVersion ?? '').trim().toLowerCase();
+  if (v === '3.1') return '3.1';
+  if (v === '3' || v === '3.0') return flags.hasV31 ? '3.1' : '3.0';
   if (v === '2' || v === '2.0') return '2.0';
   if (v === '1.5') return '1.5';
   if (v === '1' || v === '1.0') return '1.0';
-  return hasV20 ? '2.0' : (hasV15 ? '1.5' : '1.0');
+  if (flags.hasV31) return '3.1';
+  if (flags.hasV3) return '3.0';
+  return flags.hasV20 ? '2.0' : (flags.hasV15 ? '1.5' : '1.0');
 }
 
 const asAwgInt = v => toIntMaybe(v) ?? 0;
 const asAwgIntOrRange = v => toIntOrRangeMaybe(v) ?? 0;
+const asAwgBool = v => /^(1|true|yes|on)$/i.test(normalizeAwgValue(v));
 
 /**
  * AmneziaWG obfuscation knobs, in the order mihomo expects them.
  * `v15` marks fields that only exist from protocol 1.5 onward. This list is the
  * single definition of which keys count as AmneziaWG — see hasAnyAwgKey().
+ *
+ * `legacyOnly` and `v3` mark the knobs each protocol generation owns
+ * exclusively: v3 dropped the controlled-junk/itime handshake knobs and added
+ * header protection plus the handshake timers. `v31` marks the two options
+ * AmneziaWG 3.1 added on top of 3.0.
  */
 const AWG_FIELD_SPECS = [
   { key: 'Jc',    out: 'jc',    parse: asAwgInt },
@@ -791,32 +807,63 @@ const AWG_FIELD_SPECS = [
   { key: 'I3',    out: 'i3',    parse: normalizeAwgValue, v15: true },
   { key: 'I4',    out: 'i4',    parse: normalizeAwgValue, v15: true },
   { key: 'I5',    out: 'i5',    parse: normalizeAwgValue, v15: true },
-  { key: 'J1',    out: 'j1',    parse: normalizeAwgValue, v15: true },
-  { key: 'J2',    out: 'j2',    parse: normalizeAwgValue, v15: true },
-  { key: 'J3',    out: 'j3',    parse: normalizeAwgValue, v15: true },
-  { key: 'Itime', out: 'itime', parse: asAwgInt,          v15: true }
+  { key: 'J1',    out: 'j1',    parse: normalizeAwgValue, v15: true, legacyOnly: true },
+  { key: 'J2',    out: 'j2',    parse: normalizeAwgValue, v15: true, legacyOnly: true },
+  { key: 'J3',    out: 'j3',    parse: normalizeAwgValue, v15: true, legacyOnly: true },
+  { key: 'Itime', out: 'itime', parse: asAwgInt,          v15: true, legacyOnly: true },
+
+  { key: 'HeaderProtectionKey',    out: 'header-protection-key',    parse: normalizeAwgValue, v3: true },
+  { key: 'ContentPaddingAddition', out: 'content-padding-addition', parse: asAwgIntOrRange,   v3: true },
+  { key: 'RekeyAfterTime',         out: 'rekey-after-time',         parse: asAwgIntOrRange,   v3: true },
+  { key: 'RekeyTimeout',           out: 'rekey-timeout',            parse: asAwgIntOrRange,   v3: true },
+  { key: 'RejectAfterTime',        out: 'reject-after-time',        parse: asAwgIntOrRange,   v3: true },
+  { key: 'KeepaliveTimeout',       out: 'keepalive-timeout',        parse: asAwgIntOrRange,   v3: true },
+  { key: 'MaxHandshakeAttempts',   out: 'max-handshake-attempts',   parse: asAwgIntOrRange,   v3: true },
+  { key: 'RandomTrailers',         out: 'random-trailers',          parse: asAwgBool, v3: true, v31: true },
+  { key: 'DisableCookies',         out: 'disable-cookies',          parse: asAwgBool, v3: true, v31: true }
 ];
 
 function hasAnyAwgKey(get) {
   return AWG_FIELD_SPECS.some(spec => get(spec.key) !== undefined);
 }
 
-function collectAwgOptions(get) {
+/**
+ * Keep only the knobs the resolved generation accepts, and pin `version` for
+ * v3. mihomo hands `version: 3` to the AmneziaWG v3 device and every other
+ * value to the legacy one; each rejects the other's exclusive keys outright, so
+ * an unfiltered knob — or a missing `version` — is a startup failure rather
+ * than a harmless no-op.
+ */
+function buildAwgOption(parsed, version) {
+  const v3 = version.startsWith('3');
+  const awg = v3 ? { version: 3 } : {};
+  for (const spec of AWG_FIELD_SPECS) {
+    if (!(spec.out in parsed)) continue;
+    if (v3 ? spec.legacyOnly : spec.v3) continue;
+    awg[spec.out] = parsed[spec.out];
+  }
+  return awg;
+}
+
+function collectAwgOptions(get, rawVersion) {
   const hasV15 = get('I1') !== undefined;
 
-  const awg = {};
+  const parsed = {};
   for (const spec of AWG_FIELD_SPECS) {
     if (spec.v15 && !hasV15) continue;
     const raw = get(spec.key);
-    if (raw !== undefined) awg[spec.out] = spec.parse(raw);
+    if (raw !== undefined) parsed[spec.out] = spec.parse(raw);
   }
 
   // Protocol 2.0 is implied by the S3/S4 knobs or by a header given as a range.
   const hasV20 =
-    get('S3') !== undefined || get('S4') !== undefined ||
-    ['h1', 'h2', 'h3', 'h4'].some(k => typeof awg[k] === 'string');
+    's3' in parsed || 's4' in parsed ||
+    ['h1', 'h2', 'h3', 'h4'].some(k => typeof parsed[k] === 'string');
+  const hasV3 = AWG_FIELD_SPECS.some(spec => spec.v3 && spec.out in parsed);
+  const hasV31 = AWG_FIELD_SPECS.some(spec => spec.v31 && spec.out in parsed);
 
-  return { awg, hasV20, hasV15 };
+  const version = normalizeAwgVersion(rawVersion, { hasV31, hasV3, hasV20, hasV15 });
+  return { awg: buildAwgOption(parsed, version), version };
 }
 
 function parseAmneziaWireGuardBaseProxy(serverConfig, protocolConfig, clientConfig, namePrefix) {
@@ -877,9 +924,8 @@ function parseAmneziaAwgProxy(serverConfig, container) {
   const proxy = parseAmneziaWireGuardBaseProxy(serverConfig, protocolConfig, clientConfig, 'awg');
   if (!proxy) return null;
 
-  const { awg, hasV20, hasV15 } = collectAwgOptions(awgLookup(clientConfig));
-  const awgVersion = normalizeAwgVersion(protocolConfig.protocol_version, hasV20, hasV15);
-  proxy.awgVersion = awgVersion;
+  const { awg, version } = collectAwgOptions(awgLookup(clientConfig), protocolConfig.protocol_version);
+  proxy.awgVersion = version;
   proxy['amnezia-wg-option'] = awg;
 
   return proxy;
@@ -1041,8 +1087,8 @@ function parseWireGuardConfig(text) {
   const dns = ifaceGet('DNS');
   if (dns) proxy.dns = [dns.split(',')[0].trim()];
   if (isAmnezia) {
-    const { awg, hasV20, hasV15 } = collectAwgOptions(ifaceGet);
-    proxy.awgVersion = normalizeAwgVersion('', hasV20, hasV15);
+    const { awg, version } = collectAwgOptions(ifaceGet, '');
+    proxy.awgVersion = version;
     proxy['amnezia-wg-option'] = awg;
   }
   return proxy;

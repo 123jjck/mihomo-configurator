@@ -261,6 +261,110 @@ AllowedIPs = 0.0.0.0/0
     });
   });
 
+  it('parses AmneziaWG 3.0 and 3.1 config files', () => {
+    const v3Interface = `
+[Interface]
+PrivateKey = private
+Address = 10.7.0.2/32
+Jc = 4
+S1 = 30
+S2 = 40
+S3 = 50
+S4 = 20
+H1 = 1000000001-1000000005
+I1 = <b 0xf6ab><t><r 10>
+J1 = <b 0xffffffff><c>
+Itime = 60
+HeaderProtectionKey = aGVhZGVyLXByb3RlY3Rpb24ta2V5LTMyLWJ5dGVzIQ==
+ContentPaddingAddition = 0-32
+RekeyAfterTime = 120
+RekeyTimeout = 5
+RejectAfterTime = 180
+KeepaliveTimeout = 10
+MaxHandshakeAttempts = 18
+`;
+    const peer = `
+[Peer]
+PublicKey = public
+Endpoint = wg.example.com:51820
+AllowedIPs = 0.0.0.0/0
+`;
+
+    const v30 = app.parseWireGuardConfig(v3Interface + peer);
+    expect(v30).toMatchObject({
+      awgVersion: '3.0',
+      'amnezia-wg-option': {
+        // mihomo routes the proxy to its AmneziaWG v3 device on this field alone.
+        version: 3,
+        jc: 4,
+        s1: 30,
+        h1: '1000000001-1000000005',
+        i1: '<b 0xf6ab><t><r 10>',
+        'header-protection-key': 'aGVhZGVyLXByb3RlY3Rpb24ta2V5LTMyLWJ5dGVzIQ==',
+        'content-padding-addition': '0-32',
+        'rekey-after-time': 120,
+        'rekey-timeout': 5,
+        'reject-after-time': 180,
+        'keepalive-timeout': 10,
+        'max-handshake-attempts': 18
+      }
+    });
+    // v3 dropped the controlled-junk knobs; its device rejects them outright.
+    expect(v30['amnezia-wg-option']).not.toHaveProperty('j1');
+    expect(v30['amnezia-wg-option']).not.toHaveProperty('itime');
+    expect(v30['amnezia-wg-option']).not.toHaveProperty('random-trailers');
+
+    const v31 = app.parseWireGuardConfig(
+      v3Interface + 'RandomTrailers = true\nDisableCookies = true\n' + peer
+    );
+    expect(v31).toMatchObject({
+      awgVersion: '3.1',
+      'amnezia-wg-option': {
+        version: 3,
+        'random-trailers': true,
+        'disable-cookies': true
+      }
+    });
+  });
+
+  it('keeps AmneziaWG 1.x and 2.x free of v3-only fields', () => {
+    const legacy = app.parseWireGuardConfig(`
+[Interface]
+PrivateKey = private
+Address = 10.7.0.2/32
+Jc = 4
+Jmin = 40
+Jmax = 70
+S1 = 30
+S2 = 40
+S3 = 50
+S4 = 20
+H1 = 1000000001-1000000005
+I1 = <b 0xf6ab><t><r 10>
+J1 = <b 0xffffffff><c>
+Itime = 60
+
+[Peer]
+PublicKey = public
+Endpoint = wg.example.com:51820
+AllowedIPs = 0.0.0.0/0
+`);
+
+    expect(legacy).toMatchObject({
+      awgVersion: '2.0',
+      'amnezia-wg-option': {
+        jc: 4,
+        i1: '<b 0xf6ab><t><r 10>',
+        j1: '<b 0xffffffff><c>',
+        itime: 60
+      }
+    });
+    // The legacy device knows none of these, so they must never leak into a v1/v2 proxy.
+    expect(legacy['amnezia-wg-option']).not.toHaveProperty('version');
+    expect(legacy['amnezia-wg-option']).not.toHaveProperty('header-protection-key');
+    expect(legacy['amnezia-wg-option']).not.toHaveProperty('random-trailers');
+  });
+
   it('recognizes subscription URLs, unique names, and unsupported input safely', async () => {
     app.state.proxies.push({ name: 'Node', type: 'ss', server: 'one.example.com', port: 443 });
     app.state.proxyProviders.push({ name: 'Node-2', type: 'http', url: 'https://sub.example.com' });
